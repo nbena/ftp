@@ -5,9 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"net"
 	"strconv"
+	"strings"
 )
 
 func (f *Conn) getFtpResponse() (*Response, error) {
@@ -50,6 +50,54 @@ func newFtpResponse(response string) *Response {
 	return &Response{Code: code, Msg: msg}
 }
 
+func parsePasv(response *Response) (*net.TCPAddr, error) {
+	ind := strings.Index(response.Msg, "(")
+	if ind == -1 {
+		return nil, errors.New("Fail to parse PASV response")
+	}
+	addr := response.Msg[ind+1 : len(response.Msg)-2]
+	// fmt.Printf("addr: %s\n", addr)
+	// var n1, n2 string
+	// ip := ""
+	// cont := 0
+	// for i := 0; i < len(addr); i++ {
+	// 	if cont < 4 {
+	// 		ip += string(addr[i])
+	// 	}
+	// 	if addr == "," {
+	// 		cont++
+	// 	}
+	// 	if cont == 4 {
+	// 		n1 += string(addr[i])
+	// 	} else if cont == 5 {
+	// 		n2 += string(addr[i])
+	// 	}
+	// }
+	members := strings.Split(addr, ",")
+	if len(members) != 6 {
+		return nil, errors.New("Fail to parse PASV response")
+	}
+	ip := members[0] + "." + members[1] + "." + members[2] + "." + members[3]
+
+	n1Port, err := strconv.Atoi(members[4])
+	if err != nil {
+		return nil, errors.New("Fail to parse PASV n1 response")
+	}
+	n2Port, err := strconv.Atoi(members[5])
+	if err != nil {
+		return nil, errors.New("Fail to parse PASV n2 response")
+	}
+	port := n1Port*7 + n2Port
+	ipAddr := net.ParseIP(ip)
+	if ipAddr == nil {
+		return nil, errors.New("Fail to parse PASV response")
+	}
+	return &net.TCPAddr{
+		IP:   ipAddr,
+		Port: port,
+	}, nil
+}
+
 func internalDial(remote string, config *Config) (*Conn, *Response, error) {
 	var conn net.Conn
 	var err error
@@ -68,7 +116,6 @@ func internalDial(remote string, config *Config) (*Conn, *Response, error) {
 	}
 
 	if err != nil {
-		log.Printf("is where it should be")
 		return nil, nil, err
 	}
 

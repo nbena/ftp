@@ -184,6 +184,17 @@ func TestStoreRetrDeleteFile(t *testing.T) {
 
 }
 
+func TestParsePasvOk(t *testing.T) {
+
+	response := newFtpResponse("227 Entering Passive Mode (127,0,0,1,179,36)")
+	addr, err := parsePasv(response)
+	if err != nil {
+		t.Errorf("Got error: %s", err.Error())
+		return
+	}
+	t.Logf("TCPAddr is: %s", addr.String())
+}
+
 func TestDirOps(t *testing.T) {
 
 	ftpConn, _, err := DialAndAuthenticate("localhost:2121", &Config{
