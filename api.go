@@ -4,6 +4,7 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
+	"log"
 	"net"
 	"os"
 	"path"
@@ -146,6 +147,7 @@ func internalDial(remote string, config *Config) (*Conn, *Response, error) {
 	}
 
 	if err != nil {
+		log.Printf("is where it should be")
 		return nil, nil, err
 	}
 
@@ -232,6 +234,7 @@ func Dial(remote string, config *Config) (*Conn, *Response, error) {
 func DialAndAuthenticate(remote string, config *Config) (*Conn, *Response, error) {
 	conn, _, err := internalDial(remote, config)
 	if err != nil {
+		// log.Printf("catch this as well")
 		return nil, nil, err
 	}
 	resp, err := conn.Authenticate()
@@ -387,12 +390,7 @@ func (f *Conn) openListenerConnection(mode Mode) (net.Listener, error) {
 	return listener, nil
 }
 
-// PutGo sends the file 'path' to the server. Mode specifies if it is
-// necessary to use active or passive. Done will be written when stuff
-// is finished or when an error happens. If everything is fine an empty
-// string will be written. In future two channels can be added.
-func (f *Conn) PutGo(filepath string, mode *Mode, done chan<- string) {
-
+func (f *Conn) Store(filepath string, mode *Mode, done chan<- string) {
 	if mode == nil {
 		mode = &f.config.DefaultMode
 	}
@@ -431,10 +429,10 @@ func (f *Conn) PutGo(filepath string, mode *Mode, done chan<- string) {
 		done <- err.Error()
 		return
 	}
-	// log.Printf("Accepted")
 
-	// var buf []byte
-	var n int64
+	// defer sender.Close()
+
+	var n int
 	file, err := os.Open(filepath)
 	if err != nil {
 		done <- err.Error()
@@ -446,117 +444,239 @@ func (f *Conn) PutGo(filepath string, mode *Mode, done chan<- string) {
 		done <- err.Error()
 		return
 	}
-	// if info.Size() < 2048 {
-	// 	buf = make([]byte, info.Size())
-	// } else {
-	// 	buf = make([]byte, 2048)
-	// }
 
-	// the file reader puts bytes here
-	sendChan := make(chan []byte)
-	// the errchan is used by the file reader to notify errors
-	// to the sender.
-	errChan := make(chan error)
-	// the deletechan is used by the sending to notify errors
-	// to the file reader.
-	deleteChan := make(chan struct{})
-	// this channel is used by the file reader to notify it has
-	// done.
-	doneChan := make(chan struct{})
+	buffer := make([]byte, 1024)
+	// fmt.Printf("buffer created")
 
-	// reader
-	go func() {
-		buf := make([]byte, 1024)
-		// while there is something to read
-		for n < info.Size() {
-			select {
-			// if the other notifies me of an error
-			// just exit.
-			case <-deleteChan:
-				return
-			default:
-				// none reading.
-				read, err := file.Read(buf)
-				n = int64(read)
-				if err != nil {
-					// if an error occurs I notify it, then
-					// exit.
-					errChan <- err
-					return
-				}
-				// sending data.
-				sendChan <- buf
-			}
-		}
-		// notify I'm done.
-		doneChan <- struct{}{}
-		close(sendChan)
-	}()
+	for n < int(info.Size()) {
 
-	// sender
-	for {
-		select {
-		// if I get notified of an error
-		// I notify it, then I exit.
-		case err := <-errChan:
-			// tell the other to quit
-			// deleteChan <- struct{}{}
+		// reading
+		// fmt.Printf("reading")
+		read, err := file.Read(buffer)
+		if err != nil {
 			sender.Close()
 			done <- err.Error()
 			return
-		// if data I put on the connection.
-		case data := <-sendChan:
-			n, err := sender.Write(data)
-			// if errors, notify to the reader and exit.
-			if err != nil {
-				deleteChan <- struct{}{}
-				sender.Close()
+		}
+		n += read
+		// fmt.Printf("read")
 
-				done <- err.Error()
-				return
-			}
-			if n != len(data) {
-				deleteChan <- struct{}{}
-				sender.Close()
-				done <- fmt.Sprintf("Partial write: want %d, have %d", len(data), n)
-				return
-			}
-			// the reader tells me it has done.
-		case <-doneChan:
-			// log.Printf("Ok sent file %s", filepath)
+		// sending data
+		// written, err := sender.Write(buffer)
+		_, err = sender.Write(buffer)
+		// fmt.Printf("written")
+		if err != nil {
+			// fmt.Printf("write error")
 			sender.Close()
-
-			//now receiveng respose
-			_, err := f.getFtpResponse()
-			if err != nil {
-				done <- err.Error()
-			} else {
-				// if here everying is fine.
-				done <- ""
-			}
+			done <- err.Error()
 			return
 		}
 
+		// if written != len(buffer) {
+		// 	done <- fmt.Sprintf("Partial write: want %d, got %d", len(buffer), written)
+		// 	return
+		// }
 	}
 
-	// for data := range sendChan {
-	// 	n, err := sender.Write(data)
-	// 	if err != nil {
-	// 		deleteChan <- struct{}{}
-	// 		sender.Close()
-	//
-	// 		done <- err.Error()
-	// 		return
-	// 	}
-	// 	if n != len(data) {
-	// 		deleteChan <- struct{}{}
-	// 		sender.Close()
-	//
-	// 		done <- fmt.Sprintf("Partial write: want %d, have %d", len(data), n)
-	// 		return
-	// 	}
+	// until I close the data connection it doesn't answer me.
+	sender.Close()
+
+	// when completed reading response.
+	if _, err := f.getFtpResponse(); err != nil {
+		done <- err.Error()
+		return
+	}
+
+	done <- ""
+	// _, err = f.getFtpResponse()
+	// if err != nil {
+	// 	done <- err.Error()
+	// } else {
+	// 	done <- ""
 	// }
-	// log.Printf("Ok sent file %s", path)
-	// sender.Close()
-	// done <- ""
 }
+
+// DeleteFile deletes the file.
+func (f *Conn) DeleteFile(filepath string) (*Response, error) {
+	if err := f.writeCommand("DELE " + filepath + "\r\n"); err != nil {
+		return nil, err
+	}
+	return f.getFtpResponse()
+}
+
+// MkDir creates a directory.
+func (f *Conn) MkDir(name string) (*Response, error) {
+	if err := f.writeCommand("MKD " + name + "\r\n"); err != nil {
+		return nil, err
+	}
+	return f.getFtpResponse()
+}
+
+// DeleteDir deletes a directory.
+func (f *Conn) DeleteDir(name string) (*Response, error) {
+	if err := f.writeCommand("RMD " + name + "\r\n"); err != nil {
+		return nil, err
+	}
+	return f.getFtpResponse()
+}
+
+// Cd change the working directory.
+func (f *Conn) Cd(path string) (*Response, error) {
+	if err := f.writeCommand("CWD " + path + "\r\n"); err != nil {
+		return nil, err
+	}
+	return f.getFtpResponse()
+}
+
+// PutGo sends the file 'path' to the server. Mode specifies if it is
+// necessary to use active or passive. Done will be written when stuff
+// is finished or when an error happens. If everything is fine an empty
+// string will be written. In future two channels can be added.
+// func (f *Conn) PutGo(filepath string, mode *Mode, done chan<- string) {
+//
+// 	if mode == nil {
+// 		mode = &f.config.DefaultMode
+// 	}
+//
+// 	_, fileName := path.Split(filepath)
+//
+// 	listener, err := f.openListenerConnection(*mode)
+// 	// log.Printf("ret ok")
+// 	if err != nil {
+// 		// log.Printf("error here: %s", err.Error())
+// 		done <- err.Error()
+// 		return
+// 	}
+// 	defer listener.Close()
+// 	// log.Printf("defer ok")
+//
+// 	// log.Printf("Ok going to send command")
+//
+// 	err = f.writeCommand("STOR " + fileName + "\r\n")
+// 	if err != nil {
+// 		done <- err.Error()
+// 		return
+// 	}
+//
+// 	// log.Printf("Waiting response")
+// 	_, err = f.getFtpResponse()
+// 	if err != nil {
+// 		done <- err.Error()
+// 		return
+// 	}
+// 	// log.Printf("After STOU: %s", response.String())
+//
+// 	// log.Printf("Going to accept")
+// 	sender, err := listener.Accept()
+// 	if err != nil {
+// 		done <- err.Error()
+// 		return
+// 	}
+//
+// 	// log.Printf("Accepted")
+//
+// 	// var buf []byte
+// 	var n int64
+// 	file, err := os.Open(filepath)
+// 	if err != nil {
+// 		done <- err.Error()
+// 		return
+// 	}
+//
+// 	info, err := file.Stat()
+// 	if err != nil {
+// 		done <- err.Error()
+// 		return
+// 	}
+// 	// if info.Size() < 2048 {
+// 	// 	buf = make([]byte, info.Size())
+// 	// } else {
+// 	// 	buf = make([]byte, 2048)
+// 	// }
+//
+// 	// the file reader puts bytes here
+// 	sendChan := make(chan []byte)
+// 	// the errchan is used by the file reader to notify errors
+// 	// to the sender.
+// 	errChan := make(chan error)
+// 	// the deletechan is used by the sending to notify errors
+// 	// to the file reader.
+// 	deleteChan := make(chan struct{})
+// 	// this channel is used by the file reader to notify it has
+// 	// done.
+// 	doneChan := make(chan struct{})
+//
+// 	// reader
+// 	go func() {
+// 		buf := make([]byte, 1024)
+// 		// while there is something to read
+// 		for n < info.Size() {
+// 			select {
+// 			// if the other notifies me of an error
+// 			// just exit.
+// 			case <-deleteChan:
+// 				return
+// 			default:
+// 				// none reading.
+// 				read, err := file.Read(buf)
+// 				n = int64(read)
+// 				if err != nil {
+// 					// if an error occurs I notify it, then
+// 					// exit.
+// 					errChan <- err
+// 					return
+// 				}
+// 				// sending data.
+// 				sendChan <- buf
+// 			}
+// 		}
+// 		// notify I'm done.
+// 		doneChan <- struct{}{}
+// 		close(sendChan)
+// 	}()
+//
+// 	// sender
+// 	for {
+// 		select {
+// 		// if I get notified of an error
+// 		// I notify it, then I exit.
+// 		case err := <-errChan:
+// 			// tell the other to quit
+// 			// deleteChan <- struct{}{}
+// 			sender.Close()
+// 			done <- err.Error()
+// 			return
+// 		// if data I put on the connection.
+// 		case data := <-sendChan:
+// 			n, err := sender.Write(data)
+// 			// if errors, notify to the reader and exit.
+// 			if err != nil {
+// 				deleteChan <- struct{}{}
+// 				sender.Close()
+//
+// 				done <- err.Error()
+// 				return
+// 			}
+// 			if n != len(data) {
+// 				deleteChan <- struct{}{}
+// 				sender.Close()
+// 				done <- fmt.Sprintf("Partial write: want %d, have %d", len(data), n)
+// 				return
+// 			}
+// 			// the reader tells me it has done.
+// 		case <-doneChan:
+// 			// log.Printf("Ok sent file %s", filepath)
+// 			sender.Close()
+//
+// 			//now receiveng respose
+// 			_, err := f.getFtpResponse()
+// 			if err != nil {
+// 				done <- err.Error()
+// 			} else {
+// 				// if here everying is fine.
+// 				done <- ""
+// 			}
+// 			return
+// 		}
+// 	}
+// }
