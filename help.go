@@ -18,6 +18,10 @@ func portString(ip net.IP, n1, n2 int) string {
 // }
 
 func (f *Conn) getRandomPort() (port, n1, n2 int) {
+
+	f.portLock.Lock()
+	defer f.portLock.Unlock()
+
 	port = f.lastUsedPort + 1
 
 	for !isPortAvailable(port) {

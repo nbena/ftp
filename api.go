@@ -1,32 +1,31 @@
 package ftp
 
 import (
+	"bytes"
 	"crypto/tls"
-	"errors"
-	"fmt"
 	"io"
-	"log"
 	"net"
 	"os"
 	"path"
 	"strconv"
-
-	lane "gopkg.in/oleiade/lane.v1"
+	"sync"
 )
 
 // Mode is used as a constant
 //to specify which type of
 //default ftp mode should be used
 //(active or passive).
-type Mode string
+type Mode int
 
 const (
 	// FTP_ACTIVE means that for default the
 	// active modality will be used.
-	FTP_ACTIVE = Mode("active")
+	FTP_MODE_ACTIVE = Mode(1)
 	// FTP_PASSIVE means that the passive mode
 	// will be used.
-	FTP_PASSIVE = Mode("passive")
+	FTP_MODE_PASSIVE = Mode(2)
+
+	FTP_MODE_IND = Mode(0)
 )
 
 // Config contains the
@@ -50,15 +49,17 @@ type Config struct {
 
 // Conn represents the top level object.
 type Conn struct {
-	control         net.Conn
-	data            *lane.Queue // net.Conn
-	listeners       *lane.Queue //net.Listener
-	listenersParams *lane.Queue
+	control net.Conn
+	// data            *lane.Queue // net.Conn
+	// listeners       *lane.Queue //net.Listener
+	// listenersParams *lane.Queue
 	//dataRW       *bufio.ReadWriter
 	//controlRW    []*bufio.ReadWriter
 	//lastResponse string
 	config       *Config
 	lastUsedPort int
+	portLock     sync.Mutex
+	lastUsedMod  Mode
 	// rand   *rand.Rand
 }
 
@@ -84,18 +85,6 @@ func (r *Response) String() string {
 // 	return bufio.NewReadWriter(readConn, writeConn)
 // }
 
-func (f *Conn) writeCommand(cmd string) error {
-	_, err := f.control.Write([]byte(cmd))
-	return err
-}
-
-func newFtpResponse(response string) *Response {
-	//fmt.Print(response)
-	code, _ := strconv.Atoi(response[0:3])
-	msg := response[4:]
-	return &Response{Code: code, Msg: msg}
-}
-
 // IsFtpError returns true if the response represents
 // an error. That means that the code is >=500 && < 600.
 func (r *Response) IsFtpError() bool {
@@ -108,66 +97,6 @@ func (r *Response) IsFtpError() bool {
 // 	_, err := f.control.Read(buf)
 // 	return string(buf), err
 // }
-
-func (f *Conn) getFtpResponse() (*Response, error) {
-	// response, err := f.responseString()
-
-	buf := make([]byte, 1024)
-	_, err := f.control.Read(buf)
-	response := string(buf)
-
-	//fmt.Fprint(f.config.ResponseFile, response)
-
-	if err != nil {
-		return nil, err
-	}
-
-	ftpResponse := newFtpResponse(response)
-	if ftpResponse.IsFtpError() {
-		return nil, errors.New(ftpResponse.Error())
-	}
-
-	return ftpResponse, nil
-}
-
-func internalDial(remote string, config *Config) (*Conn, *Response, error) {
-	var conn net.Conn
-	var err error
-
-	dialer := &net.Dialer{
-		LocalAddr: &net.TCPAddr{
-			IP:   config.LocalIP,
-			Port: config.LocalPort,
-		},
-	}
-
-	if config.TLSConfig == nil {
-		conn, err = dialer.Dial("tcp", remote)
-	} else {
-		conn, err = tls.DialWithDialer(dialer, "tcp", remote, config.TLSConfig)
-	}
-
-	if err != nil {
-		log.Printf("is where it should be")
-		return nil, nil, err
-	}
-
-	ftpConn := &Conn{
-		control:         conn,
-		config:          config,
-		listenersParams: lane.NewQueue(),
-		listeners:       lane.NewQueue(),
-		data:            lane.NewQueue(),
-		// rand:            rand.New(rand.NewSource(time.Now().UnixNano())),
-	}
-
-	response, err := ftpConn.getFtpResponse()
-	if err != nil {
-		return nil, nil, err
-	}
-
-	return ftpConn, response, nil
-}
 
 // Dial connects to the ftp server.
 func Dial(remote string, config *Config) (*Conn, *Response, error) {
@@ -292,46 +221,22 @@ func (f *Conn) Authenticate() (*Response, error) {
 // 	return response, nil
 // }
 
-func (f *Conn) portAccept() error {
-	if f.listeners.Empty() {
-		return errors.New("A new listener must be created")
-	}
-
-	//use type assertion
-	listener := f.listeners.Pop().(net.Listener)
-
-	conn, err := listener.Accept()
-	if err != nil {
-		return err
-	}
-
-	f.data.Enqueue(conn)
-	return nil
-}
-
-// Port runs the PORT command on the local IP,
-func (f *Conn) Port( /*ip net.IP*/ ) (*Response, error) {
-	port, n1, n2 := f.getRandomPort()
-	// port := n1*265 + n2
-
-	// opening local listener
-	// listener, err := net.Listen("tcp", fmt.Sprintf("%s:%d", f.config.LocalIp.String(), port))
-	// if err != nil {
-	// 	return nil, err
-	// }
-	f.listenersParams.Enqueue(&port)
-
-	//writing command to the server.
-	f.writeCommand("PORT " + portString(f.config.LocalIP, n1, n2) + "\r\n")
-	response, err := f.getFtpResponse()
-	if err != nil {
-		return nil, err
-	}
-
-	//if ok adding the listener to the listeners list
-	// f.listeners.Enqueue(listener)
-	return response, nil
-}
+// func (f *Conn) portAccept() error {
+// 	if f.listeners.Empty() {
+// 		return errors.New("A new listener must be created")
+// 	}
+//
+// 	//use type assertion
+// 	listener := f.listeners.Pop().(net.Listener)
+//
+// 	conn, err := listener.Accept()
+// 	if err != nil {
+// 		return err
+// 	}
+//
+// 	f.data.Enqueue(conn)
+// 	return nil
+// }
 
 //Port execute a PORT command to the FTP Server. The first param is the IP
 //address which the server should connect to, the second is the port.
@@ -346,8 +251,7 @@ func (f *Conn) Port( /*ip net.IP*/ ) (*Response, error) {
 //Quit close the current FTP session, it means that every transfer in progress
 //is closed too.
 func (f *Conn) Quit() (*Response, error) {
-	f.writeCommand("QUIT\r\n")
-	response, err := f.getFtpResponse()
+	response, err := f.writeCommandAndGetResponse("QUIT\r\n")
 	if err != nil {
 		return nil, err
 	}
@@ -355,40 +259,18 @@ func (f *Conn) Quit() (*Response, error) {
 	//	err = dataConn.Close()
 	//}
 
-	for !f.data.Empty() {
-		dataConn := f.data.Pop().(net.Conn)
-		dataConn.Close()
-	}
-
-	for !f.listeners.Empty() {
-		listener := f.listeners.Pop().(net.Listener)
-		listener.Close()
-	}
+	// for !f.data.Empty() {
+	// 	dataConn := f.data.Pop().(net.Conn)
+	// 	dataConn.Close()
+	// }
+	//
+	// for !f.listeners.Empty() {
+	// 	listener := f.listeners.Pop().(net.Listener)
+	// 	listener.Close()
+	// }
 
 	err = f.control.Close()
 	return response, err
-}
-
-func (f *Conn) openListenerConnection(mode Mode) (net.Listener, error) {
-	var listener net.Listener
-	var err error
-	if mode == FTP_ACTIVE {
-		_, err = f.Port()
-		if err != nil {
-			return nil, err
-		}
-		// log.Printf("PORT OK")
-		// opening the listener.
-		port := f.listenersParams.Dequeue().(*int)
-		listener, err = net.Listen("tcp", fmt.Sprintf("%s:%d", f.config.LocalIP.String(), *port))
-		// log.Printf("Listener Ok")
-		if err != nil {
-			return nil, err
-		}
-	} else {
-
-	}
-	return listener, nil
 }
 
 // Store loads a file to the server.
@@ -398,9 +280,9 @@ func (f *Conn) Store(filepath string, mode Mode, doneChan chan<- struct{}, errCh
 
 	_, fileName := path.Split(filepath)
 
-	if mode == FTP_ACTIVE {
+	if mode == FTP_MODE_ACTIVE {
 
-		listener, err := f.openListenerConnection(mode)
+		listener, err := f.openListener()
 		if err != nil {
 			errChan <- err
 			return
@@ -519,67 +401,94 @@ func (f *Conn) Cd(path string) (*Response, error) {
 	return f.getFtpResponse()
 }
 
-func (f *Conn) writeCommandAndGetResponse(cmd string) (*Response, error) {
-	if err := f.writeCommand(cmd); err != nil {
-		return nil, err
-	}
-	return f.getFtpResponse()
+// Ls performs a LIST on the current directory.
+// The result is written on doneChan, one row per item. Eventual errors will be
+// written on errChan, causing the function to immediately exit.
+func (f *Conn) Ls(mode Mode, doneChan chan<- []string, errChan chan<- error) {
+	f.internalLs(mode, "", doneChan, errChan)
 }
 
-// Ls performs a LIST over a directory.
-func (f *Conn) Ls(mode Mode, doneChan chan<- []string, errChan chan<- error) {
+// LsDir performs a LIST on the given directory/file.
+// The result is written on doneChan, one row per item. Eventual errors will be
+// written on errChan, causing the function to immediately exit.
+func (f *Conn) LsDir(mode Mode, path string, doneChan chan<- []string, errChan chan<- error) {
+	f.internalLs(mode, path, doneChan, errChan)
+}
 
-	var sender io.ReadCloser
+// Retrieve download a file located at filepathSrc to filepathDest.
+// When finished, it writes into doneChan. Any error, that'll make it immediately exits,
+// is written into errChan.
+func (f *Conn) Retrieve(mode Mode, filepathSrc, filepathDest string, doneChan chan<- struct{}, errChan chan<- error) {
 
-	if mode == FTP_ACTIVE {
-		// create the listener.
-		listener, err := f.openListenerConnection(mode)
+	var receiver io.ReadCloser
+
+	if mode == FTP_MODE_ACTIVE {
+
+		//opening a listener.
+		listener, err := f.openListener()
 		if err != nil {
 			errChan <- err
 			return
 		}
 		defer listener.Close()
+
 		// sending command.
-		_, err = f.writeCommandAndGetResponse("LIST\r\n")
-		if err != nil {
-			errChan <- err
-			return
-		}
-		// accept connection
-		sender, err = listener.Accept()
-		if err != nil {
+		if _, err = f.writeCommandAndGetResponse("RETR " + filepathSrc + "\r\n"); err != nil {
 			errChan <- err
 			return
 		}
 
+		// accept connection.
+		receiver, err = listener.Accept()
+		if err != nil {
+			errChan <- err
+			return
+		}
 	} else {
 
 	}
 
-	buffer := make([]byte, 1024)
-	var result []string
-	for {
-		_, err := sender.Read(buffer)
-		if err != nil && err == io.EOF {
-			break
-		} else if err != nil {
-			// error
-			errChan <- err
-			return
-		}
-		read := string(buffer)
-		// log.Printf(read + "\n")
-		result = append(result, read)
-	}
-
-	// final reading.
-	if _, err := f.getFtpResponse(); err != nil {
+	file, err := os.Create(filepathDest)
+	if err != nil {
 		errChan <- err
 		return
 	}
 
-	doneChan <- result
+	// starting reading into receiver
+	buffer := make([]byte, 1024)
 
+	for {
+		_, err = receiver.Read(buffer)
+		if err != nil && err == io.EOF {
+			// ending.
+			break
+		} else if err != nil {
+			errChan <- err
+			return
+		}
+
+		// so we can skip null bytes.
+		index := bytes.IndexByte(buffer, 0)
+		if index == -1 {
+			index = len(buffer)
+		}
+
+		if _, err = file.Write(buffer[:index]); err != nil {
+			// closing the connection as well
+			receiver.Close()
+			errChan <- err
+			return
+		}
+	}
+
+	// now getting the response.
+	_, err = f.getFtpResponse()
+	if err != nil {
+		errChan <- err
+		return
+	}
+
+	doneChan <- struct{}{}
 }
 
 // PutGo sends the file 'path' to the server. Mode specifies if it is

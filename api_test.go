@@ -1,16 +1,17 @@
 package ftp
 
 import (
-	"log"
+	"io/ioutil"
 	"net"
 	"os"
+	"reflect"
 	"testing"
 )
 
 func TestDial(t *testing.T) {
 
 	ftpConn, resp, err := Dial("localhost:2121", &Config{
-		DefaultMode: FTP_ACTIVE,
+		DefaultMode: FTP_MODE_ACTIVE,
 		Username:    "anonymous",
 		Password:    "c@b.com",
 		LocalIP:     net.IP([]byte{127, 0, 0, 1}),
@@ -38,7 +39,7 @@ func TestDial(t *testing.T) {
 func TestDialAndAuthenticate(t *testing.T) {
 
 	ftpConn, resp, err := DialAndAuthenticate("localhost:2121", &Config{
-		DefaultMode: FTP_ACTIVE,
+		DefaultMode: FTP_MODE_ACTIVE,
 		Username:    "anonymous",
 		Password:    "c@b.com",
 		LocalIP:     net.IP([]byte{127, 0, 0, 1}),
@@ -64,7 +65,7 @@ func TestDialAndAuthenticate(t *testing.T) {
 func TestPort(t *testing.T) {
 
 	ftpConn, resp, err := DialAndAuthenticate("localhost:2121", &Config{
-		DefaultMode: FTP_ACTIVE,
+		DefaultMode: FTP_MODE_ACTIVE,
 		Username:    "anonymous",
 		Password:    "c@b.com",
 		LocalIP:     net.IP([]byte{127, 0, 0, 1}),
@@ -78,13 +79,14 @@ func TestPort(t *testing.T) {
 
 	// t.Log(resp.String())
 
-	resp, err = ftpConn.Port()
+	resp, port, err := ftpConn.port()
 	if err != nil {
 		t.Errorf("Error in port: %s", err.Error())
 		return
 	}
 
 	t.Logf("PORT resp: %s", resp.String())
+	t.Logf("Going to port at: %d", port)
 
 }
 
@@ -97,10 +99,10 @@ func TestIsPortAvailable(t *testing.T) {
 
 }
 
-func TestStoreAndDeleteFile(t *testing.T) {
+func TestStoreRetrDeleteFile(t *testing.T) {
 
 	ftpConn, _, err := DialAndAuthenticate("localhost:2121", &Config{
-		DefaultMode: FTP_ACTIVE,
+		DefaultMode: FTP_MODE_ACTIVE,
 		Username:    "anonymous",
 		Password:    "c@b.com",
 		LocalIP:     net.IP([]byte{127, 0, 0, 1}),
@@ -135,16 +137,41 @@ func TestStoreAndDeleteFile(t *testing.T) {
 	// 	t.Errorf("Response: %s", ret)
 	// }
 
-	doneChan := make(chan struct{})
-	errChan := make(chan error, 1)
-	go ftpConn.Store("tmp.txt", FTP_ACTIVE, doneChan, errChan)
+	doneChanStore := make(chan struct{})
+	errChanStore := make(chan error, 1)
+
+	go ftpConn.Store("tmp.txt", FTP_MODE_ACTIVE, doneChanStore, errChanStore)
 
 	select {
-	case err = <-errChan:
+	case err = <-errChanStore:
 		t.Errorf("Got error: %s", err.Error())
 		return
-	case <-doneChan:
+	case <-doneChanStore:
+	}
 
+	doneChanRetr := make(chan struct{})
+	errChanRetr := make(chan error, 1)
+	go ftpConn.Retrieve(FTP_MODE_ACTIVE, "tmp.txt", "temp_get.txt", doneChanRetr, errChanRetr)
+
+	select {
+	case err = <-errChanRetr:
+		t.Errorf("Got error: %s", err.Error())
+		return
+	case <-doneChanRetr:
+
+		//reading downloaded file.
+		var content []byte // just to prevent go vet
+		content, err = ioutil.ReadFile("temp_get.txt")
+		if err != nil {
+			t.Errorf("Got error: %s", err.Error())
+			return
+		}
+		if !reflect.DeepEqual(fileContent, content) {
+			t.Errorf("Mismatched files")
+			t.Errorf("string content:\n%s\n%s", string(fileContent), string(content))
+			t.Logf("byte content:\n%v\n%v", fileContent, content)
+			return
+		}
 	}
 
 	response, err := ftpConn.DeleteFile("tmp.txt")
@@ -157,10 +184,10 @@ func TestStoreAndDeleteFile(t *testing.T) {
 
 }
 
-func TestMkAndCdAndRmdir(t *testing.T) {
+func TestDirOps(t *testing.T) {
 
 	ftpConn, _, err := DialAndAuthenticate("localhost:2121", &Config{
-		DefaultMode: FTP_ACTIVE,
+		DefaultMode: FTP_MODE_ACTIVE,
 		Username:    "anonymous",
 		Password:    "c@b.com",
 		LocalIP:     net.IP([]byte{127, 0, 0, 1}),
@@ -192,6 +219,30 @@ func TestMkAndCdAndRmdir(t *testing.T) {
 		return
 	}
 
+	doneChanLs := make(chan []string)
+	errChanLs := make(chan error, 1)
+	var lsResponse []string
+
+	var lsDirResponse []string
+	doneChanDir := make(chan []string)
+	errChanDir := make(chan error, 1)
+
+	go ftpConn.Ls(FTP_MODE_ACTIVE, doneChanLs, errChanLs)
+	select {
+	case lsResponse = <-doneChanLs:
+	case err = <-errChanLs:
+		t.Errorf("Got error: %s", err.Error())
+		return
+	}
+
+	go ftpConn.LsDir(FTP_MODE_ACTIVE, "temp", doneChanDir, errChanDir)
+	select {
+	case lsDirResponse = <-doneChanDir:
+	case err = <-errChanDir:
+		t.Errorf("Got error: %s", err.Error())
+		return
+	}
+
 	rmResponse, err := ftpConn.DeleteDir("temp")
 	if err != nil {
 		t.Errorf("Got error: %s", err.Error())
@@ -201,45 +252,47 @@ func TestMkAndCdAndRmdir(t *testing.T) {
 	t.Logf("MKD temp resp: %s", mkResponse.String())
 	t.Logf("CWD temp resp: %s", cdInResponse.String())
 	t.Logf("CWD .. resp: %s", cdOutResponse.String())
+	t.Logf("LIST resp:\n%v", lsResponse)
+	t.Logf("LIST temp resp:\n%v", lsDirResponse)
 	t.Logf("RMD temp resp: %s", rmResponse.String())
 
 }
 
-func TestLs(t *testing.T) {
-
-	ftpConn, _, err := DialAndAuthenticate("localhost:2121", &Config{
-		DefaultMode: FTP_ACTIVE,
-		Username:    "anonymous",
-		Password:    "c@b.com",
-		LocalIP:     net.IP([]byte{127, 0, 0, 1}),
-	})
-
-	defer ftpConn.Quit()
-
-	if err != nil {
-		t.Errorf("Got error: %s", err.Error())
-		return
-	}
-
-	doneChan := make(chan []string)
-	errChan := make(chan error, 1)
-
-	go ftpConn.Ls(FTP_ACTIVE, doneChan, errChan)
-
-	// for {
-	select {
-	case err := <-errChan:
-		t.Errorf("Got error: %s", err.Error())
-		return
-	case result := <-doneChan:
-		// for _, v := range result {
-		// 	fmt.Printf("%s\n", v)
-		// }
-		log.Printf("LIST is:\n%+v", result)
-		return
-		// default:
-		// 	fmt.Printf("i'm waiting")
-	}
-	// }
-
-}
+// func TestLs(t *testing.T) {
+//
+// 	ftpConn, _, err := DialAndAuthenticate("localhost:2121", &Config{
+// 		DefaultMode: FTP_MODE_ACTIVE,
+// 		Username:    "anonymous",
+// 		Password:    "c@b.com",
+// 		LocalIP:     net.IP([]byte{127, 0, 0, 1}),
+// 	})
+//
+// 	defer ftpConn.Quit()
+//
+// 	if err != nil {
+// 		t.Errorf("Got error: %s", err.Error())
+// 		return
+// 	}
+//
+// 	doneChan := make(chan []string)
+// 	errChan := make(chan error, 1)
+//
+// 	go ftpConn.Ls(FTP_MODE_ACTIVE, doneChan, errChan)
+//
+// 	// for {
+// 	select {
+// 	case err := <-errChan:
+// 		t.Errorf("Got error: %s", err.Error())
+// 		return
+// 	case result := <-doneChan:
+// 		// for _, v := range result {
+// 		// 	fmt.Printf("%s\n", v)
+// 		// }
+// 		t.Logf("LIST is:\n%+v", result)
+// 		return
+// 		// default:
+// 		// 	fmt.Printf("i'm waiting")
+// 	}
+// 	// }
+//
+// }
