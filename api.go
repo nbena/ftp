@@ -4,6 +4,7 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"os"
@@ -20,11 +21,11 @@ import (
 type Mode string
 
 const (
-	//FTP_ACTIVE means that for default the
-	//active modality will be used.
+	// FTP_ACTIVE means that for default the
+	// active modality will be used.
 	FTP_ACTIVE = Mode("active")
-	//FTP_PASSIVE means that the passive mode
-	//will be used.
+	// FTP_PASSIVE means that the passive mode
+	// will be used.
 	FTP_PASSIVE = Mode("passive")
 )
 
@@ -390,58 +391,48 @@ func (f *Conn) openListenerConnection(mode Mode) (net.Listener, error) {
 	return listener, nil
 }
 
-func (f *Conn) Store(filepath string, mode *Mode, done chan<- string) {
-	if mode == nil {
-		mode = &f.config.DefaultMode
-	}
+// Store loads a file to the server.
+func (f *Conn) Store(filepath string, mode Mode, doneChan chan<- struct{}, errChan chan error) {
+
+	var sender io.WriteCloser
 
 	_, fileName := path.Split(filepath)
 
-	listener, err := f.openListenerConnection(*mode)
-	// log.Printf("ret ok")
-	if err != nil {
-		// log.Printf("error here: %s", err.Error())
-		done <- err.Error()
-		return
+	if mode == FTP_ACTIVE {
+
+		listener, err := f.openListenerConnection(mode)
+		if err != nil {
+			errChan <- err
+			return
+		}
+		defer listener.Close()
+
+		_, err = f.writeCommandAndGetResponse("STOR " + fileName + "\r\n")
+		if err != nil {
+			errChan <- err
+			return
+		}
+
+		sender, err = listener.Accept()
+		if err != nil {
+			errChan <- err
+			return
+		}
+
+	} else {
+
 	}
-	defer listener.Close()
-	// log.Printf("defer ok")
-
-	// log.Printf("Ok going to send command")
-
-	err = f.writeCommand("STOR " + fileName + "\r\n")
-	if err != nil {
-		done <- err.Error()
-		return
-	}
-
-	// log.Printf("Waiting response")
-	_, err = f.getFtpResponse()
-	if err != nil {
-		done <- err.Error()
-		return
-	}
-	// log.Printf("After STOU: %s", response.String())
-
-	// log.Printf("Going to accept")
-	sender, err := listener.Accept()
-	if err != nil {
-		done <- err.Error()
-		return
-	}
-
-	// defer sender.Close()
 
 	var n int
 	file, err := os.Open(filepath)
 	if err != nil {
-		done <- err.Error()
+		errChan <- err
 		return
 	}
 
 	info, err := file.Stat()
 	if err != nil {
-		done <- err.Error()
+		errChan <- err
 		return
 	}
 
@@ -455,7 +446,7 @@ func (f *Conn) Store(filepath string, mode *Mode, done chan<- string) {
 		read, err := file.Read(buffer)
 		if err != nil {
 			sender.Close()
-			done <- err.Error()
+			errChan <- err
 			return
 		}
 		n += read
@@ -468,7 +459,7 @@ func (f *Conn) Store(filepath string, mode *Mode, done chan<- string) {
 		if err != nil {
 			// fmt.Printf("write error")
 			sender.Close()
-			done <- err.Error()
+			errChan <- err
 			return
 		}
 
@@ -483,11 +474,11 @@ func (f *Conn) Store(filepath string, mode *Mode, done chan<- string) {
 
 	// when completed reading response.
 	if _, err := f.getFtpResponse(); err != nil {
-		done <- err.Error()
+		errChan <- err
 		return
 	}
 
-	done <- ""
+	doneChan <- struct{}{}
 	// _, err = f.getFtpResponse()
 	// if err != nil {
 	// 	done <- err.Error()
@@ -526,6 +517,69 @@ func (f *Conn) Cd(path string) (*Response, error) {
 		return nil, err
 	}
 	return f.getFtpResponse()
+}
+
+func (f *Conn) writeCommandAndGetResponse(cmd string) (*Response, error) {
+	if err := f.writeCommand(cmd); err != nil {
+		return nil, err
+	}
+	return f.getFtpResponse()
+}
+
+// Ls performs a LIST over a directory.
+func (f *Conn) Ls(mode Mode, doneChan chan<- []string, errChan chan<- error) {
+
+	var sender io.ReadCloser
+
+	if mode == FTP_ACTIVE {
+		// create the listener.
+		listener, err := f.openListenerConnection(mode)
+		if err != nil {
+			errChan <- err
+			return
+		}
+		defer listener.Close()
+		// sending command.
+		_, err = f.writeCommandAndGetResponse("LIST\r\n")
+		if err != nil {
+			errChan <- err
+			return
+		}
+		// accept connection
+		sender, err = listener.Accept()
+		if err != nil {
+			errChan <- err
+			return
+		}
+
+	} else {
+
+	}
+
+	buffer := make([]byte, 1024)
+	var result []string
+	for {
+		_, err := sender.Read(buffer)
+		if err != nil && err == io.EOF {
+			break
+		} else if err != nil {
+			// error
+			errChan <- err
+			return
+		}
+		read := string(buffer)
+		// log.Printf(read + "\n")
+		result = append(result, read)
+	}
+
+	// final reading.
+	if _, err := f.getFtpResponse(); err != nil {
+		errChan <- err
+		return
+	}
+
+	doneChan <- result
+
 }
 
 // PutGo sends the file 'path' to the server. Mode specifies if it is

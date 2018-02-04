@@ -1,6 +1,7 @@
 package ftp
 
 import (
+	"log"
 	"net"
 	"os"
 	"testing"
@@ -134,12 +135,16 @@ func TestStoreAndDeleteFile(t *testing.T) {
 	// 	t.Errorf("Response: %s", ret)
 	// }
 
-	done := make(chan string, 1)
-	ftpConn.Store("tmp.txt", nil, done)
-	ret := <-done
-	if ret != "" {
-		t.Errorf("Response: %s", ret)
+	doneChan := make(chan struct{})
+	errChan := make(chan error, 1)
+	go ftpConn.Store("tmp.txt", FTP_ACTIVE, doneChan, errChan)
+
+	select {
+	case err = <-errChan:
+		t.Errorf("Got error: %s", err.Error())
 		return
+	case <-doneChan:
+
 	}
 
 	response, err := ftpConn.DeleteFile("tmp.txt")
@@ -162,6 +167,11 @@ func TestMkAndCdAndRmdir(t *testing.T) {
 	})
 
 	defer ftpConn.Quit()
+
+	if err != nil {
+		t.Errorf("Got error: %s", err.Error())
+		return
+	}
 
 	mkResponse, err := ftpConn.MkDir("temp")
 	if err != nil {
@@ -192,5 +202,44 @@ func TestMkAndCdAndRmdir(t *testing.T) {
 	t.Logf("CWD temp resp: %s", cdInResponse.String())
 	t.Logf("CWD .. resp: %s", cdOutResponse.String())
 	t.Logf("RMD temp resp: %s", rmResponse.String())
+
+}
+
+func TestLs(t *testing.T) {
+
+	ftpConn, _, err := DialAndAuthenticate("localhost:2121", &Config{
+		DefaultMode: FTP_ACTIVE,
+		Username:    "anonymous",
+		Password:    "c@b.com",
+		LocalIP:     net.IP([]byte{127, 0, 0, 1}),
+	})
+
+	defer ftpConn.Quit()
+
+	if err != nil {
+		t.Errorf("Got error: %s", err.Error())
+		return
+	}
+
+	doneChan := make(chan []string)
+	errChan := make(chan error, 1)
+
+	go ftpConn.Ls(FTP_ACTIVE, doneChan, errChan)
+
+	// for {
+	select {
+	case err := <-errChan:
+		t.Errorf("Got error: %s", err.Error())
+		return
+	case result := <-doneChan:
+		// for _, v := range result {
+		// 	fmt.Printf("%s\n", v)
+		// }
+		log.Printf("LIST is:\n%+v", result)
+		return
+		// default:
+		// 	fmt.Printf("i'm waiting")
+	}
+	// }
 
 }
