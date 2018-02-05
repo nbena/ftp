@@ -202,8 +202,7 @@ func (f *Conn) internalLs(mode Mode, filepath string, doneChan chan<- []string, 
 		defer listener.Close()
 
 		// sending command.
-		_, err = f.writeCommandAndGetResponse(cmd)
-		if err != nil {
+		if _, err = f.writeCommandAndGetResponse(cmd); err != nil {
 			errChan <- err
 			return
 		}
@@ -215,8 +214,24 @@ func (f *Conn) internalLs(mode Mode, filepath string, doneChan chan<- []string, 
 			return
 		}
 
-	} else {
+	} else if mode == FTP_MODE_PASSIVE {
+		addr, err := f.pasvGetAddr()
+		if err != nil {
+			errChan <- err
+			return
+		}
 
+		// write command
+		if _, err = f.writeCommandAndGetResponse(cmd); err != nil {
+			errChan <- err
+			return
+		}
+
+		receiver, err = f.connectToAddr(addr)
+		if err != nil {
+			errChan <- err
+			return
+		}
 	}
 
 	buffer := make([]byte, 1024)
