@@ -303,6 +303,15 @@ func TestDirOpsActive(t *testing.T) {
 		return
 	}
 
+	pwdResponse, directory, err := ftpConn.Pwd()
+	if err != nil {
+		t.Errorf("Got error: %s", err.Error())
+		return
+	}
+	if directory != "/temp" {
+		t.Errorf("Error: want %s, got %s", "temp", directory)
+	}
+
 	cdOutResponse, err := ftpConn.Cd("..")
 	if err != nil {
 		t.Errorf("Got error: %s", err.Error())
@@ -333,6 +342,24 @@ func TestDirOpsActive(t *testing.T) {
 		return
 	}
 
+	// this will throw an error
+
+	doneChanLsErr := make(chan []string)
+	errChanLsErr := make(chan error, 1)
+
+	go ftpConn.LsDir(FTP_MODE_ACTIVE, "tmp_renamed", doneChanLsErr, errChanLsErr)
+
+	select {
+	case err = <-errChanLsErr:
+		if !inverseResponse(err.Error()).IsFileNotExists() {
+			t.Errorf("Got error: %s", err.Error())
+			return
+		}
+	case <-doneChanLsErr:
+		t.Errorf("Got 0 error while expecting one")
+		return
+	}
+
 	rmResponse, err := ftpConn.DeleteDir("temp")
 	if err != nil {
 		t.Errorf("Got error: %s", err.Error())
@@ -341,6 +368,7 @@ func TestDirOpsActive(t *testing.T) {
 
 	t.Logf("MKD temp resp: %s", mkResponse.String())
 	t.Logf("CWD temp resp: %s", cdInResponse.String())
+	t.Logf("PWD resp: %s", pwdResponse.String())
 	t.Logf("CWD .. resp: %s", cdOutResponse.String())
 	t.Logf("LIST resp:\n%v", lsResponse)
 	t.Logf("LIST temp resp:\n%v", lsDirResponse)
@@ -377,6 +405,15 @@ func TestDirOpsPassive(t *testing.T) {
 		return
 	}
 
+	pwdResponse, directory, err := ftpConn.Pwd()
+	if err != nil {
+		t.Errorf("Got error: %s", err.Error())
+		return
+	}
+	if directory != "/temp" {
+		t.Errorf("Error: want %s, got %s", "temp", directory)
+	}
+
 	cdOutResponse, err := ftpConn.Cd("..")
 	if err != nil {
 		t.Errorf("Got error: %s", err.Error())
@@ -407,6 +444,24 @@ func TestDirOpsPassive(t *testing.T) {
 		return
 	}
 
+	// this will throw an error
+
+	doneChanLsErr := make(chan []string)
+	errChanLsErr := make(chan error, 1)
+
+	go ftpConn.LsDir(FTP_MODE_ACTIVE, "tmp_renamed", doneChanLsErr, errChanLsErr)
+
+	select {
+	case err = <-errChanLsErr:
+		if !inverseResponse(err.Error()).IsFileNotExists() {
+			t.Errorf("Got error: %s", err.Error())
+			return
+		}
+	case <-doneChanLsErr:
+		t.Errorf("Got 0 error while expecting one")
+		return
+	}
+
 	rmResponse, err := ftpConn.DeleteDir("temp")
 	if err != nil {
 		t.Errorf("Got error: %s", err.Error())
@@ -415,9 +470,87 @@ func TestDirOpsPassive(t *testing.T) {
 
 	t.Logf("MKD temp resp: %s", mkResponse.String())
 	t.Logf("CWD temp resp: %s", cdInResponse.String())
+	t.Logf("PWD resp: %s", pwdResponse.String())
 	t.Logf("CWD .. resp: %s", cdOutResponse.String())
 	t.Logf("LIST resp:\n%v", lsResponse)
 	t.Logf("LIST temp resp:\n%v", lsDirResponse)
 	t.Logf("RMD temp resp: %s", rmResponse.String())
+
+}
+
+func TestRename(t *testing.T) {
+
+	ftpConn, _, err := DialAndAuthenticate("localhost:2121", &Config{
+		DefaultMode: FTP_MODE_ACTIVE,
+		Username:    "anonymous",
+		Password:    "c@b.com",
+		LocalIP:     net.IP([]byte{127, 0, 0, 1}),
+	})
+
+	if err != nil {
+		t.Errorf("Error in conn: %s", err.Error())
+		return
+	}
+
+	defer ftpConn.Quit()
+
+	fileContent := []byte("hello this is an example")
+	file, err := os.Create("tmp.txt")
+	defer os.Remove("tmp.txt")
+
+	if err != nil {
+		t.Errorf(err.Error())
+		return
+	}
+	_, err = file.Write(fileContent)
+	if err != nil {
+		t.Errorf(err.Error())
+		return
+	}
+
+	doneChanStore := make(chan struct{})
+	errChanStore := make(chan error, 1)
+
+	go ftpConn.Store("tmp.txt", FTP_MODE_PASSIVE, doneChanStore, errChanStore)
+
+	select {
+	case err = <-errChanStore:
+		t.Errorf("Got store error: %s", err.Error())
+		return
+	case <-doneChanStore:
+	}
+
+	t.Logf("stored\n")
+
+	responseRename, err := ftpConn.Rename("tmp.txt", "tmp_renamed.txt")
+	if err != nil {
+		t.Errorf("Got rename error: %s", err.Error())
+		return
+	}
+
+	t.Logf("I've done the renaming")
+
+	doneChanLs := make(chan []string)
+	errChanLs := make(chan error, 1)
+	var ls []string
+
+	go ftpConn.LsDir(FTP_MODE_ACTIVE, "tmp_renamed.txt", doneChanLs, errChanLs)
+
+	select {
+	case err = <-errChanLs:
+		t.Errorf("Got error: %s", err.Error())
+		return
+	case ls = <-doneChanLs:
+	}
+
+	deleteResponse, err := ftpConn.DeleteFile("tmp_renamed.txt")
+	if err != nil {
+		t.Errorf("Got delete error: %s", err.Error())
+		return
+	}
+
+	t.Logf("RENAME resp: %s", responseRename.String())
+	t.Logf("LIST resp: %s", ls[0])
+	t.Logf("DELETE resp: %s", deleteResponse.String())
 
 }

@@ -18,6 +18,7 @@ import (
 	"bufio"
 	"bytes"
 	"crypto/tls"
+	"fmt"
 	"io"
 	"net"
 	"os"
@@ -100,6 +101,11 @@ func (r *Response) String() string {
 // an error. That means that the code is >=500 && < 600.
 func (r *Response) IsFtpError() bool {
 	return r.Code >= 500 && r.Code < 600
+}
+
+// IsFileNotExists check if the code is 450.
+func (r *Response) IsFileNotExists() bool {
+	return r.Code == 450
 }
 
 // Dial connects to the ftp server.
@@ -235,7 +241,7 @@ func (f *Conn) Store(filepath string, mode Mode, doneChan chan<- struct{}, errCh
 
 		// sending data
 		// written, err := sender.Write(buffer)
-		_, err = sender.Write(buffer)
+		_, err = sender.Write(buffer[:read])
 		// fmt.Printf("written")
 		if err != nil {
 			// fmt.Printf("write error")
@@ -270,34 +276,22 @@ func (f *Conn) Store(filepath string, mode Mode, doneChan chan<- struct{}, errCh
 
 // DeleteFile deletes the file.
 func (f *Conn) DeleteFile(filepath string) (*Response, error) {
-	if err := f.writeCommand("DELE " + filepath + "\r\n"); err != nil {
-		return nil, err
-	}
-	return f.getFtpResponse()
+	return f.writeCommandAndGetResponse("DELE " + filepath + "\r\n")
 }
 
 // MkDir creates a directory.
 func (f *Conn) MkDir(name string) (*Response, error) {
-	if err := f.writeCommand("MKD " + name + "\r\n"); err != nil {
-		return nil, err
-	}
-	return f.getFtpResponse()
+	return f.writeCommandAndGetResponse("MKD " + name + "\r\n")
 }
 
 // DeleteDir deletes a directory.
 func (f *Conn) DeleteDir(name string) (*Response, error) {
-	if err := f.writeCommand("RMD " + name + "\r\n"); err != nil {
-		return nil, err
-	}
-	return f.getFtpResponse()
+	return f.writeCommandAndGetResponse("RMD " + name + "\r\n")
 }
 
 // Cd change the working directory.
 func (f *Conn) Cd(path string) (*Response, error) {
-	if err := f.writeCommand("CWD " + path + "\r\n"); err != nil {
-		return nil, err
-	}
-	return f.getFtpResponse()
+	return f.writeCommandAndGetResponse("CWD " + path + "\r\n")
 }
 
 // Ls performs a LIST on the current directory.
@@ -312,6 +306,17 @@ func (f *Conn) Ls(mode Mode, doneChan chan<- []string, errChan chan<- error) {
 // written on errChan, causing the function to immediately exit.
 func (f *Conn) LsDir(mode Mode, path string, doneChan chan<- []string, errChan chan<- error) {
 	f.internalLs(mode, path, doneChan, errChan)
+}
+
+// Pwd returns the current working directory.
+// It returns the raw response too.
+func (f *Conn) Pwd() (*Response, string, error) {
+	response, err := f.writeCommandAndGetResponse("PWD\r\n")
+	if err != nil {
+		return nil, "", err
+	}
+	directory, err := getPwd(response)
+	return response, directory, err
 }
 
 // Retrieve download a file located at filepathSrc to filepathDest.
@@ -405,4 +410,14 @@ func (f *Conn) Retrieve(mode Mode, filepathSrc, filepathDest string, doneChan ch
 	}
 
 	doneChan <- struct{}{}
+}
+
+// Rename renames a file called 'from' to a file called 'to'.
+// It returns just the last response.
+func (f *Conn) Rename(from, to string) (*Response, error) {
+	if response, err := f.writeCommandAndGetResponse("RNFR " + from + "\r\n"); err != nil {
+		fmt.Printf("First: %s\n", response.String())
+		return nil, err
+	}
+	return f.writeCommandAndGetResponse("RNTO " + to + "\r\n")
 }

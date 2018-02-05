@@ -78,6 +78,18 @@ func newFtpResponse(response string) *Response {
 	return &Response{Code: code, Msg: msg}
 }
 
+func inverseResponse(response string) *Response {
+	code, _ := strconv.Atoi(response[0:3])
+	msg := response[5:]
+
+	//msg = strings.TrimSpace(msg)
+	// msg = strings.TrimRight(msg, "\r\n")
+	// msg = strings.TrimRight(msg, "\r")
+	// msg = strings.TrimRight(msg, "\n")
+
+	return &Response{Code: code, Msg: msg}
+}
+
 func parsePasv(response *Response) (*net.TCPAddr, error) {
 	ind := strings.Index(response.Msg, "(")
 	if ind == -1 {
@@ -207,6 +219,7 @@ func (f *Conn) internalLs(mode Mode, filepath string, doneChan chan<- []string, 
 	}
 
 	if mode == FTP_MODE_ACTIVE {
+
 		// create the listener.
 		listener, err := f.openListener()
 		if err != nil {
@@ -216,8 +229,21 @@ func (f *Conn) internalLs(mode Mode, filepath string, doneChan chan<- []string, 
 		defer listener.Close()
 
 		// sending command.
-		if _, err = f.writeCommandAndGetResponse(cmd); err != nil {
+		// response, err := f.writeCommandAndGetResponse(cmd)
+		//
+		// file, err := os.Create("response.txt")
+		//
+		// file.Write([]byte(response.String()))
+		//
+		// log.Printf("ls request: %s", response.String())
+		response, err := f.writeCommandAndGetResponse(cmd)
+		if err != nil {
 			errChan <- err
+			return
+		}
+
+		if response.IsFileNotExists() {
+			errChan <- errors.New(response.String())
 			return
 		}
 
@@ -294,6 +320,19 @@ func (f *Conn) pasvGetAddr() (*net.TCPAddr, error) {
 	}
 
 	return addr, nil
+}
+
+func getPwd(response *Response) (string, error) {
+	ind1 := strings.Index(response.Msg, "\"")
+	if ind1 == -1 {
+		return "", errors.New("Fail to parse response")
+	}
+	ind2 := strings.LastIndex(response.Msg, "\"")
+	if ind2 == -1 {
+		return "", errors.New("Fail to parse response")
+	}
+	directory := response.Msg[ind1+1 : ind2]
+	return directory, nil
 }
 
 // func (f *Conn) pasvAndConnect() (net.Conn, error) {

@@ -26,7 +26,9 @@ type shell struct {
 }
 
 func newshell() *shell {
-	return &shell{in: bufio.NewReader(os.Stdin)}
+	return &shell{
+		in: bufio.NewReader(os.Stdin),
+	}
 }
 
 func (s *shell) scanLine() string {
