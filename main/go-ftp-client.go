@@ -1,15 +1,21 @@
+// Copyright 2018 nbena
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package main
 
 import (
-	"crypto/tls"
 	"flag"
-	"net"
-	"os"
-
-	"strconv"
-
-	"github.com/nbena/go-ftp"
-	// shellLib "github.com/nbena/go-ftp/shell"
 )
 
 func parseArgv() ([]string, int, []bool) {
@@ -27,79 +33,4 @@ func parseArgv() ([]string, int, []bool) {
 
 func main() {
 
-	args, port, options := parseArgv()
-
-	uri := args[0] + ":" + strconv.Itoa(port)
-
-	//shell := shellLib.NewShell()
-	shell := NewShell()
-
-	//username, password := shell.AskCredential()
-	username, password := args[1], args[2]
-
-	var printFile *os.File
-
-	if options[0] {
-		printFile = os.Stdout
-	} else {
-		printFile, _ = os.Open(os.DevNull)
-	}
-
-	var tlsConfig *tls.Config = nil
-
-	if options[1] {
-		tlsConfig = &tls.Config{
-			InsecureSkipVerify:       true,
-			PreferServerCipherSuites: true}
-	}
-
-	// var mode ftp.Mode
-	//
-	// if args[3] == "active" {
-	// 	mode = ftp.FTP_ACTIVE
-	// } else if args[3] == "passive" {
-	// 	mode = ftp.FTP_PASSIVE
-	// }
-
-	params := &ftp.Params{
-		DefaultMode:  ftp.Mode(args[3]),
-		ResponseFile: printFile,
-		TLSConfig:    tlsConfig}
-
-	/*conn, err := */
-	shell.LogAndAuth(uri)
-
-	ftpConn, err := ftp.ConnectTo(uri, params)
-	if err != nil {
-		panic(err)
-	}
-
-	//stdin := bufio.NewReader(os.Stdin)
-
-	if _, err = ftpConn.Authenticate(username, password); err != nil {
-		panic(err)
-	}
-
-	shell.Print("Successfully authenticated")
-
-	response, err := ftpConn.Port(net.IPv4(127, 0, 0, 1), 1930)
-	if err != nil {
-		panic(err)
-	}
-	shell.Print(response.String())
-
-	ftpConn.Quit()
-
 }
-
-// func main() {
-// 	con, _ := net.Dial("tcp", "localhost:2121")
-// 	buf := make([]byte, 1024)
-// 	con.Read(buf)
-// 	con.Write([]byte("USER anonymous\r\n"))
-// 	con.Read(buf)
-// 	con.Write([]byte("PASS password\r\n"))
-// 	buf2 := make([]byte, 1024)
-// 	con.Read(buf2)
-// 	fmt.Printf("%s", string(buf2))
-// }

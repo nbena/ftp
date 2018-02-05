@@ -1,3 +1,17 @@
+// Copyright 2018 nbena
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package ftp
 
 import (
@@ -26,6 +40,7 @@ const (
 	// will be used.
 	FTP_MODE_PASSIVE = Mode(2)
 
+	// This needs to be implemented.
 	FTP_MODE_IND = Mode(0)
 )
 
@@ -81,85 +96,16 @@ func (r *Response) String() string {
 	return strconv.Itoa(r.Code) + ": " + r.Msg
 }
 
-// func GetReadWriterFromConn(conn net.Conn) *bufio.ReadWriter {
-// 	readConn := bufio.NewReader(conn)
-// 	writeConn := bufio.NewWriter(conn)
-// 	return bufio.NewReadWriter(readConn, writeConn)
-// }
-
 // IsFtpError returns true if the response represents
 // an error. That means that the code is >=500 && < 600.
 func (r *Response) IsFtpError() bool {
 	return r.Code >= 500 && r.Code < 600
 }
 
-// func (f *Conn) responseString() (string, error) {
-//
-// 	buf := make([]byte, 1024)
-// 	_, err := f.control.Read(buf)
-// 	return string(buf), err
-// }
-
 // Dial connects to the ftp server.
 func Dial(remote string, config *Config) (*Conn, *Response, error) {
-	// var conn net.Conn
-	// var ip net.IP
-	// var err error
-	//
-	// addr := strings.Split(remote, ":")
-	// if len(addr) != 2 {
-	// 	return nil, errors.New("Remote must be ip/hostname:port")
-	// }
-	//
-	// remoteAddr := addr[0]
-	// port, err := strconv.Atoi(addr[1])
-	// if err != nil {
-	// 	return nil, err
-	// }
-	//
-	// //tryng to parse IP.
-	// ip = net.ParseIP(remoteAddr)
-	// if ip != nil {
-	// 	// looking up
-	// 	addresses, err := net.LookupIP(remoteAddr)
-	// 	if err != nil {
-	// 		return nil, err
-	// 	}
-	// 	ip = addresses[0]
-	// }
-
 	return internalDial(remote, config)
 }
-
-// func ConnectTo(uri string, config *Config) (*Conn, error) {
-//
-// 	var conn net.Conn
-// 	var err error
-//
-// 	if config.TLSConfig == nil {
-// 		conn, err = net.Dial("tcp", uri)
-// 	} else {
-// 		conn, err = tls.Dial("tcp", uri, config.TLSConfig)
-// 	}
-//
-// 	if err != nil {
-// 		return nil, err
-// 	}
-// 	connection := &Conn{
-// 		control:   conn,
-// 		config:    config,
-// 		listeners: lane.NewStack(),
-// 		data:      lane.NewStack(),
-// 		rand:      rand.New(rand.NewSource(time.Now().UnixNano())),
-// 	}
-//
-// 	_, err = connection.getFtpResponse()
-// 	if err != nil {
-// 		return nil, err
-// 	}
-//
-// 	return connection, nil
-// }
 
 // DialAndAuthenticate connects to the server and
 // authenticates with it.
@@ -197,59 +143,6 @@ func (f *Conn) Authenticate() (*Response, error) {
 	return response, nil
 }
 
-// func (f *Conn) openPortConnection(ip net.IP, n1, n2 int) (net.Listener, error) {
-// 	port := n1*256 + n2
-// 	return net.Listen("tcp", ":"+strconv.Itoa(port))
-// }
-//
-// func (f *Conn) portInit(ip net.IP, n1, n2 int) (*FtpResponse, error) {
-//
-// 	listener, err := f.openPortConnection(ip, n1, n2)
-// 	if err != nil {
-// 		return nil, err
-// 	}
-//
-// 	f.writeCommand("PORT " + PortString(ip, n1, n2) + "\r\n")
-// 	response, err := f.GetFtpResponse()
-// 	if err != nil {
-// 		return nil, err
-// 	}
-//
-// 	//once is done add the new listner to the listeners' stack.
-// 	f.listeners.Push(listener)
-//
-// 	//if ok Accept a new connection.
-//
-// 	return response, nil
-// }
-
-// func (f *Conn) portAccept() error {
-// 	if f.listeners.Empty() {
-// 		return errors.New("A new listener must be created")
-// 	}
-//
-// 	//use type assertion
-// 	listener := f.listeners.Pop().(net.Listener)
-//
-// 	conn, err := listener.Accept()
-// 	if err != nil {
-// 		return err
-// 	}
-//
-// 	f.data.Enqueue(conn)
-// 	return nil
-// }
-
-//Port execute a PORT command to the FTP Server. The first param is the IP
-//address which the server should connect to, the second is the port.
-//Plase notiche that the port is 'complete'.
-//The port will be sequently divided into the 2 numbers required by the FTP
-//protocol.
-// func (f *Conn) Port(ip net.IP, port int) (*Response, error) {
-// 	n1, n2 := PortNumbers(port)
-// 	return f.portInit(ip, n1, n2)
-// }
-
 //Quit close the current FTP session, it means that every transfer in progress
 //is closed too.
 func (f *Conn) Quit() (*Response, error) {
@@ -257,19 +150,6 @@ func (f *Conn) Quit() (*Response, error) {
 	if err != nil {
 		return nil, err
 	}
-	//for _, dataConn := range f.data {
-	//	err = dataConn.Close()
-	//}
-
-	// for !f.data.Empty() {
-	// 	dataConn := f.data.Pop().(net.Conn)
-	// 	dataConn.Close()
-	// }
-	//
-	// for !f.listeners.Empty() {
-	// 	listener := f.listeners.Pop().(net.Listener)
-	// 	listener.Close()
-	// }
 
 	err = f.control.Close()
 	return response, err
