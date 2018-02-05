@@ -17,12 +17,12 @@ func TestDial(t *testing.T) {
 		LocalIP:     net.IP([]byte{127, 0, 0, 1}),
 	})
 
-	defer ftpConn.Quit()
-
 	if err != nil {
 		t.Errorf("Error in conn: %s", err.Error())
 		return
 	}
+
+	defer ftpConn.Quit()
 
 	t.Log(resp.String())
 
@@ -45,11 +45,12 @@ func TestDialAndAuthenticate(t *testing.T) {
 		LocalIP:     net.IP([]byte{127, 0, 0, 1}),
 	})
 
-	defer ftpConn.Quit()
-
 	if err != nil {
 		t.Errorf("Error in conn: %s", err.Error())
+		return
 	}
+
+	defer ftpConn.Quit()
 
 	t.Log(resp.String())
 
@@ -71,11 +72,12 @@ func TestPort(t *testing.T) {
 		LocalIP:     net.IP([]byte{127, 0, 0, 1}),
 	})
 
-	defer ftpConn.Quit()
-
 	if err != nil {
 		t.Errorf("Error in conn: %s", err.Error())
+		return
 	}
+
+	defer ftpConn.Quit()
 
 	// t.Log(resp.String())
 
@@ -108,12 +110,12 @@ func TestStoreRetrDeleteFile(t *testing.T) {
 		LocalIP:     net.IP([]byte{127, 0, 0, 1}),
 	})
 
-	defer ftpConn.Quit()
-
 	if err != nil {
 		t.Errorf("Error in conn: %s", err.Error())
 		return
 	}
+
+	defer ftpConn.Quit()
 
 	fileContent := []byte("hello this is an example")
 	file, err := os.Create("tmp.txt")
@@ -128,14 +130,6 @@ func TestStoreRetrDeleteFile(t *testing.T) {
 		t.Errorf(err.Error())
 		return
 	}
-
-	// done := make(chan string, 1)
-	//
-	// ftpConn.PutGo("tmp.txt", nil, done)
-	// ret := <-done
-	// if ret != "" {
-	// 	t.Errorf("Response: %s", ret)
-	// }
 
 	doneChanStore := make(chan struct{})
 	errChanStore := make(chan error, 1)
@@ -193,6 +187,10 @@ func TestParsePasvOk(t *testing.T) {
 		return
 	}
 	t.Logf("TCPAddr is: %s", addr.String())
+	if addr.Port != 45860 {
+		t.Errorf("Port is not correct")
+		return
+	}
 }
 
 func TestDirOps(t *testing.T) {
@@ -204,12 +202,12 @@ func TestDirOps(t *testing.T) {
 		LocalIP:     net.IP([]byte{127, 0, 0, 1}),
 	})
 
-	defer ftpConn.Quit()
-
 	if err != nil {
-		t.Errorf("Got error: %s", err.Error())
+		t.Errorf("Error in conn: %s", err.Error())
 		return
 	}
+
+	defer ftpConn.Quit()
 
 	mkResponse, err := ftpConn.MkDir("temp")
 	if err != nil {
@@ -266,6 +264,50 @@ func TestDirOps(t *testing.T) {
 	t.Logf("LIST resp:\n%v", lsResponse)
 	t.Logf("LIST temp resp:\n%v", lsDirResponse)
 	t.Logf("RMD temp resp: %s", rmResponse.String())
+
+}
+
+func TestStorePassive(t *testing.T) {
+
+	ftpConn, _, err := DialAndAuthenticate("localhost:2121", &Config{
+		DefaultMode: FTP_MODE_ACTIVE,
+		Username:    "anonymous",
+		Password:    "c@b.com",
+		LocalIP:     net.IP([]byte{127, 0, 0, 1}),
+	})
+
+	if err != nil {
+		t.Errorf("Error in conn: %s", err.Error())
+		return
+	}
+
+	defer ftpConn.Quit()
+
+	fileContent := []byte("hello this is an example")
+	file, err := os.Create("tmp.txt")
+	defer os.Remove("tmp.txt")
+
+	if err != nil {
+		t.Errorf(err.Error())
+		return
+	}
+	_, err = file.Write(fileContent)
+	if err != nil {
+		t.Errorf(err.Error())
+		return
+	}
+
+	doneChanStore := make(chan struct{})
+	errChanStore := make(chan error, 1)
+
+	go ftpConn.Store("tmp.txt", FTP_MODE_PASSIVE, doneChanStore, errChanStore)
+
+	select {
+	case err = <-errChanStore:
+		t.Errorf("Got error: %s", err.Error())
+		return
+	case <-doneChanStore:
+	}
 
 }
 

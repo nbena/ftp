@@ -1,6 +1,7 @@
 package ftp
 
 import (
+	"bufio"
 	"bytes"
 	"crypto/tls"
 	"io"
@@ -49,7 +50,8 @@ type Config struct {
 
 // Conn represents the top level object.
 type Conn struct {
-	control net.Conn
+	control       net.Conn
+	controlReader *bufio.Reader
 	// data            *lane.Queue // net.Conn
 	// listeners       *lane.Queue //net.Listener
 	// listenersParams *lane.Queue
@@ -301,7 +303,26 @@ func (f *Conn) Store(filepath string, mode Mode, doneChan chan<- struct{}, errCh
 			return
 		}
 
-	} else {
+	} else if mode == FTP_MODE_PASSIVE {
+
+		addr, err := f.pasvGetAddr()
+		if err != nil {
+			errChan <- err
+			return
+		}
+
+		// write command
+		_, err = f.writeCommandAndGetResponse("STOR " + fileName + "\r\n")
+		if err != nil {
+			errChan <- err
+			return
+		}
+
+		sender, err = f.connectToAddr(addr)
+		if err != nil {
+			errChan <- err
+			return
+		}
 
 	}
 

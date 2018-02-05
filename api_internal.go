@@ -1,6 +1,7 @@
 package ftp
 
 import (
+	"bufio"
 	"crypto/tls"
 	"errors"
 	"fmt"
@@ -13,15 +14,23 @@ import (
 func (f *Conn) getFtpResponse() (*Response, error) {
 	// response, err := f.responseString()
 
-	buf := make([]byte, 1024)
-	_, err := f.control.Read(buf)
-	response := string(buf)
+	//reader := bufio.NewReader(f.control)
+
+	// buf := make([]byte, 1024)
+	// n, err := f.control.Read(buf)
+	// response := string(buf[:n])
+
+	buff, _, err := f.controlReader.ReadLine()
+
+	// fmt.Printf("I read: %d", n)
 
 	//fmt.Fprint(f.config.ResponseFile, response)
 
 	if err != nil {
 		return nil, err
 	}
+
+	response := string(buff)
 
 	ftpResponse := newFtpResponse(response)
 	if ftpResponse.IsFtpError() {
@@ -44,36 +53,26 @@ func (f *Conn) writeCommandAndGetResponse(cmd string) (*Response, error) {
 }
 
 func newFtpResponse(response string) *Response {
-	//fmt.Print(response)
 	code, _ := strconv.Atoi(response[0:3])
 	msg := response[4:]
+
+	//msg = strings.TrimSpace(msg)
+	// msg = strings.TrimRight(msg, "\r\n")
+	// msg = strings.TrimRight(msg, "\r")
+	// msg = strings.TrimRight(msg, "\n")
+
 	return &Response{Code: code, Msg: msg}
 }
 
 func parsePasv(response *Response) (*net.TCPAddr, error) {
 	ind := strings.Index(response.Msg, "(")
 	if ind == -1 {
-		return nil, errors.New("Fail to parse PASV response")
+		return nil, errors.New("Fail to parse PASV response: '('")
 	}
-	addr := response.Msg[ind+1 : len(response.Msg)-2]
-	// fmt.Printf("addr: %s\n", addr)
-	// var n1, n2 string
-	// ip := ""
-	// cont := 0
-	// for i := 0; i < len(addr); i++ {
-	// 	if cont < 4 {
-	// 		ip += string(addr[i])
-	// 	}
-	// 	if addr == "," {
-	// 		cont++
-	// 	}
-	// 	if cont == 4 {
-	// 		n1 += string(addr[i])
-	// 	} else if cont == 5 {
-	// 		n2 += string(addr[i])
-	// 	}
-	// }
+	addr := response.Msg[ind+1 : len(response.Msg)-1]
+
 	members := strings.Split(addr, ",")
+	// fmt.Printf("members: %v\n", members)
 	if len(members) != 6 {
 		return nil, errors.New("Fail to parse PASV response")
 	}
@@ -87,7 +86,7 @@ func parsePasv(response *Response) (*net.TCPAddr, error) {
 	if err != nil {
 		return nil, errors.New("Fail to parse PASV n2 response")
 	}
-	port := n1Port*7 + n2Port
+	port := n1Port*256 + n2Port
 	ipAddr := net.ParseIP(ip)
 	if ipAddr == nil {
 		return nil, errors.New("Fail to parse PASV response")
@@ -125,7 +124,8 @@ func internalDial(remote string, config *Config) (*Conn, *Response, error) {
 		// listenersParams: lane.NewQueue(),
 		// listeners:       lane.NewQueue(),
 		// data:            lane.NewQueue(),
-		lastUsedMod: FTP_MODE_IND,
+		lastUsedMod:   FTP_MODE_IND,
+		controlReader: bufio.NewReader(conn),
 		// rand:            rand.New(rand.NewSource(time.Now().UnixNano())),
 	}
 
@@ -244,3 +244,38 @@ func (f *Conn) internalLs(mode Mode, filepath string, doneChan chan<- []string, 
 
 	doneChan <- result
 }
+
+func (f *Conn) connectToAddr(addr *net.TCPAddr) (net.Conn, error) {
+	return net.Dial("tcp4", addr.String())
+}
+
+func (f *Conn) pasv() (*Response, error) {
+	return f.writeCommandAndGetResponse("PASV\r\n")
+}
+
+func (f *Conn) pasvGetAddr() (*net.TCPAddr, error) {
+	response, err := f.pasv()
+	if err != nil {
+		return nil, err
+	}
+
+	addr, err := parsePasv(response)
+	if err != nil {
+		return nil, err
+	}
+
+	return addr, nil
+}
+
+// func (f *Conn) pasvAndConnect() (net.Conn, error) {
+// 	response, err := f.pasv()
+// 	if err != nil {
+// 		return nil, err
+// 	}
+// 	addr, err := parsePasv(response)
+// 	if err != nil {
+// 		return nil, err
+// 	}
+//
+// 	return f.getPasvConnection(addr)
+// }
