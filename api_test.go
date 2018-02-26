@@ -20,6 +20,7 @@ import (
 	"os"
 	"reflect"
 	"testing"
+	"time"
 )
 
 func authenticatedConn() (*Conn, *Response, error) {
@@ -138,13 +139,21 @@ func TestFileOpsActive(t *testing.T) {
 	}
 	_, err = file.Write(fileContent)
 	if err != nil {
-		t.Errorf(err.Error())
+		t.Error(err.Error())
 		return
 	}
 
 	doneChanStore := make(chan struct{}, 1)
 	abortChanStore := make(chan struct{}, 1)
 	errChanStore := make(chan error, 1)
+
+	stat, err := file.Stat()
+	if err != nil {
+		t.Error(err.Error())
+		return
+	}
+
+	size := stat.Size()
 
 	go ftpConn.Store("tmp.txt", FTP_MODE_ACTIVE, doneChanStore, abortChanStore, errChanStore)
 
@@ -177,8 +186,17 @@ func TestFileOpsActive(t *testing.T) {
 			t.Errorf("Mismatched files")
 			t.Errorf("string content:\n%s\n%s", string(fileContent), string(content))
 			t.Logf("byte content:\n%v\n%v", fileContent, content)
-			return
 		}
+	}
+
+	// now checking the size of the uploaded file.
+	sizeResponse, gotSize, err := ftpConn.Size("tmp.txt")
+	if err != nil {
+		t.Errorf("Got error: %s", err.Error())
+	}
+
+	if int(size) != gotSize {
+		t.Errorf("Mismatched size, want: %d, got: %d", size, gotSize)
 	}
 
 	response, err := ftpConn.DeleteFile("tmp.txt")
@@ -187,6 +205,7 @@ func TestFileOpsActive(t *testing.T) {
 		return
 	}
 
+	t.Logf("SIZE resp: %s", sizeResponse.String())
 	t.Logf("DELE resp: %s", response.String())
 
 }
@@ -505,15 +524,11 @@ func TestRename(t *testing.T) {
 	case <-doneChanStore:
 	}
 
-	t.Logf("stored\n")
-
 	responseRename, err := ftpConn.Rename("tmp.txt", "tmp_renamed.txt")
 	if err != nil {
 		t.Errorf("Got rename error: %s", err.Error())
 		return
 	}
-
-	t.Logf("I've done the renaming")
 
 	doneChanLs := make(chan []string)
 	errChanLs := make(chan error, 1)
@@ -643,4 +658,61 @@ func TestRetrAbort(t *testing.T) {
 			return
 		}
 	}
+}
+
+func TestParseTime(t *testing.T) {
+
+	response, err := newFtpResponse("213 20180226133244.000")
+	if err != nil {
+		t.Errorf(err.Error())
+	}
+
+	date, err := response.getTime()
+	if date.Year() != 2018 || date.Month() != time.February || date.Day() != 26 || date.Hour() != 13 || date.Minute() != 32 || date.Second() != 44 || date.Nanosecond() != 00 {
+		t.Errorf("Error in date: %s", date.String())
+	}
+
+	ftpConn, _, err := authenticatedConn()
+	if err != nil {
+		t.Fatalf(err.Error())
+	}
+
+	defer ftpConn.Quit()
+
+	fileContent := []byte("hello this is an example")
+	file, err := os.Create("tmp.txt")
+	if err != nil {
+		t.Errorf(err.Error())
+		return
+	}
+
+	defer os.Remove("tmp.txt")
+
+	_, err = file.Write(fileContent)
+	if err != nil {
+		t.Errorf(err.Error())
+		return
+	}
+
+	doneChanStore := make(chan struct{}, 1)
+	abortChanStore := make(chan struct{}, 1)
+	errChanStore := make(chan error, 1)
+
+	go ftpConn.Store("tmp.txt", FTP_MODE_ACTIVE, doneChanStore, abortChanStore, errChanStore)
+
+	select {
+	case err = <-errChanStore:
+		t.Errorf("Got store error: %s", err.Error())
+		return
+	case <-doneChanStore:
+	}
+
+	gotResponse, gotDate, err := ftpConn.LastModificationTime("tmp.txt")
+	if err != nil {
+		t.Errorf(err.Error())
+		return
+	}
+
+	t.Logf("Raw: %s", gotResponse)
+	t.Logf("Time: %s", gotDate.String())
 }

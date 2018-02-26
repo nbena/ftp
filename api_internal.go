@@ -23,6 +23,7 @@ import (
 	"net"
 	"strconv"
 	"strings"
+	"time"
 )
 
 func (r *Response) IsAborted() bool {
@@ -31,6 +32,38 @@ func (r *Response) IsAborted() bool {
 
 func (r *Response) IsSuccesfullyCompleted() bool {
 	return r.Code == 226
+}
+
+// IsFailToAccomplish checks if response.Code == 550.
+// 550 is an error used when the server can parse our
+// request but can't serve it. For example when we request a
+// size for a set transfer mode which the file can't be sent over.
+// Another example is where modification time is not available.
+func (r *Response) IsFailToAccomplish() bool {
+	return r.Code == 550
+}
+
+func (r *Response) getTime() (*time.Time, error) {
+	var year, month, day, hour, min, sec, nsec int
+
+	// scanf has been taken from the linux ftp
+	// client source code.
+	parsed, err := fmt.Sscanf(r.Msg,
+		"%04d%02d%02d%02d%02d%02d.%03d",
+		&year, &month, &day, &hour, &min, &sec, &nsec)
+	if err != nil {
+		return nil, err
+	}
+	// if we can't parse nsec is ok
+	if parsed == 6 {
+		nsec = 0
+	}
+	if parsed < 6 {
+		return nil, fmt.Errorf("Fail to parse date: %s", r.Msg)
+	}
+
+	date := time.Date(year, time.Month(month), day, hour, min, sec, nsec, time.UTC)
+	return &date, nil
 }
 
 func (f *Conn) getFtpResponse() (*Response, error) {

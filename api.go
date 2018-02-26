@@ -18,13 +18,14 @@ import (
 	"bufio"
 	"bytes"
 	"crypto/tls"
-	"fmt"
+	"errors"
 	"io"
 	"net"
 	"os"
 	"path"
 	"strconv"
 	"sync"
+	"time"
 )
 
 // Mode is used as a constant
@@ -352,6 +353,39 @@ func (f *Conn) LsDir(mode Mode, path string, doneChan chan<- []string, errChan c
 	f.internalLs(mode, path, doneChan, errChan)
 }
 
+// Size returns the size of the specified file. The size
+// is not the size of the file but the number of bytes that
+// will be transmitted if the file would have been downloaded.
+// According to RFC 3659, a 213 code must be returned if the
+// request is ok. If another code is returned, an error will be thrown.
+func (f *Conn) Size(file string) (*Response, int, error) {
+	response, err := f.writeCommandAndGetResponse("SIZE " + file + "\r\n")
+	if err != nil {
+		return nil, 0, err
+	}
+	if response.Code != 213 {
+		return nil, 0, errors.New(response.Error())
+	}
+	// the size is the message.
+	size, err := strconv.Atoi(response.Msg)
+	if err != nil {
+		return nil, 0, err
+	}
+	return response, size, nil
+}
+
+// LastModificationTime returns the last modification file of the given file in
+// UTC format. The raw response is accessible, as well as the date (for sure)
+// and an eventual error occured.
+func (f *Conn) LastModificationTime(file string) (*Response, *time.Time, error) {
+	response, err := f.writeCommandAndGetResponse("MDTM " + file + "\r\n")
+	if err != nil {
+		return nil, nil, err
+	}
+	date, err := response.getTime()
+	return response, date, err
+}
+
 // Pwd returns the current working directory.
 // It returns the raw response too.
 func (f *Conn) Pwd() (*Response, string, error) {
@@ -507,8 +541,8 @@ func (f *Conn) Retrieve(mode Mode, filepathSrc, filepathDest string,
 // Rename renames a file called 'from' to a file called 'to'.
 // It returns just the last response.
 func (f *Conn) Rename(from, to string) (*Response, error) {
-	if response, err := f.writeCommandAndGetResponse("RNFR " + from + "\r\n"); err != nil {
-		fmt.Printf("First: %s\n", response.String())
+	if _, err := f.writeCommandAndGetResponse("RNFR " + from + "\r\n"); err != nil {
+		// fmt.Printf("First: %s\n", response.String())
 		return nil, err
 	}
 	return f.writeCommandAndGetResponse("RNTO " + to + "\r\n")
