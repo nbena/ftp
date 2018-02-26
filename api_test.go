@@ -142,10 +142,11 @@ func TestFileOpsActive(t *testing.T) {
 		return
 	}
 
-	doneChanStore := make(chan struct{})
+	doneChanStore := make(chan struct{}, 1)
+	abortChanStore := make(chan struct{}, 1)
 	errChanStore := make(chan error, 1)
 
-	go ftpConn.Store("tmp.txt", FTP_MODE_ACTIVE, doneChanStore, errChanStore)
+	go ftpConn.Store("tmp.txt", FTP_MODE_ACTIVE, doneChanStore, abortChanStore, errChanStore)
 
 	select {
 	case err = <-errChanStore:
@@ -154,9 +155,10 @@ func TestFileOpsActive(t *testing.T) {
 	case <-doneChanStore:
 	}
 
-	doneChanRetr := make(chan struct{})
+	doneChanRetr := make(chan struct{}, 1)
+	abortChanRetr := make(chan struct{}, 1)
 	errChanRetr := make(chan error, 1)
-	go ftpConn.Retrieve(FTP_MODE_ACTIVE, "tmp.txt", "temp_get.txt", doneChanRetr, errChanRetr)
+	go ftpConn.Retrieve(FTP_MODE_ACTIVE, "tmp.txt", "temp_get.txt", doneChanRetr, abortChanRetr, errChanRetr)
 
 	select {
 	case err = <-errChanRetr:
@@ -214,9 +216,10 @@ func TestFileOpsPassive(t *testing.T) {
 	}
 
 	doneChanStore := make(chan struct{})
+	abortChanStore := make(chan struct{}, 1)
 	errChanStore := make(chan error, 1)
 
-	go ftpConn.Store("tmp.txt", FTP_MODE_PASSIVE, doneChanStore, errChanStore)
+	go ftpConn.Store("tmp.txt", FTP_MODE_PASSIVE, doneChanStore, abortChanStore, errChanStore)
 
 	select {
 	case err = <-errChanStore:
@@ -225,9 +228,11 @@ func TestFileOpsPassive(t *testing.T) {
 	case <-doneChanStore:
 	}
 
-	doneChanRetr := make(chan struct{})
+	doneChanRetr := make(chan struct{}, 1)
+	abortChanRetr := make(chan struct{}, 1)
 	errChanRetr := make(chan error, 1)
-	go ftpConn.Retrieve(FTP_MODE_PASSIVE, "tmp.txt", "temp_get.txt", doneChanRetr, errChanRetr)
+
+	go ftpConn.Retrieve(FTP_MODE_PASSIVE, "tmp.txt", "temp_get.txt", doneChanRetr, abortChanRetr, errChanRetr)
 
 	select {
 	case err = <-errChanRetr:
@@ -488,9 +493,10 @@ func TestRename(t *testing.T) {
 	}
 
 	doneChanStore := make(chan struct{})
+	abortChanStore := make(chan struct{}, 1)
 	errChanStore := make(chan error, 1)
 
-	go ftpConn.Store("tmp.txt", FTP_MODE_PASSIVE, doneChanStore, errChanStore)
+	go ftpConn.Store("tmp.txt", FTP_MODE_PASSIVE, doneChanStore, abortChanStore, errChanStore)
 
 	select {
 	case err = <-errChanStore:
@@ -532,4 +538,109 @@ func TestRename(t *testing.T) {
 	t.Logf("LIST resp: %s", ls[0])
 	t.Logf("DELETE resp: %s", deleteResponse.String())
 
+}
+
+func TestStoreAbort(t *testing.T) {
+
+	ftpConn, _, err := authenticatedConn()
+
+	if err != nil {
+		t.Fatalf("Conn error: %s", err.Error())
+	}
+
+	defer ftpConn.Quit()
+
+	fileContent := []byte("hello this is an example")
+	file, err := os.Create("tmp.txt")
+	defer os.Remove("tmp.txt")
+
+	if err != nil {
+		t.Errorf(err.Error())
+		return
+	}
+	_, err = file.Write(fileContent)
+	if err != nil {
+		t.Errorf(err.Error())
+		return
+	}
+
+	doneChanStore := make(chan struct{}, 1)
+	abortChanStore := make(chan struct{}, 1)
+	errChanStore := make(chan error, 1)
+
+	// writing immediately to
+	// abortChanStore to be sure
+	// that the function will abort immediately,
+	// if not, because of the short file
+	// dimension, one sending will be enough and
+	// the function will never really use the abort.
+	abortChanStore <- struct{}{}
+
+	go ftpConn.Store("tmp.txt", FTP_MODE_ACTIVE, doneChanStore, abortChanStore, errChanStore)
+
+	select {
+	case err = <-errChanStore:
+		t.Errorf("Got store error: %s", err.Error())
+		return
+	case <-doneChanStore:
+	}
+}
+
+func TestRetrAbort(t *testing.T) {
+	ftpConn, _, err := authenticatedConn()
+
+	if err != nil {
+		t.Fatalf("Conn error: %s", err.Error())
+	}
+
+	defer ftpConn.Quit()
+
+	fileContent := []byte("hello this is an example")
+	file, err := os.Create("tmp.txt")
+	if err != nil {
+		t.Errorf(err.Error())
+		return
+	}
+
+	defer os.Remove("tmp.txt")
+
+	_, err = file.Write(fileContent)
+	if err != nil {
+		t.Errorf(err.Error())
+		return
+	}
+
+	doneChanStore := make(chan struct{}, 1)
+	abortChanStore := make(chan struct{}, 1)
+	errChanStore := make(chan error, 1)
+
+	go ftpConn.Store("tmp.txt", FTP_MODE_ACTIVE, doneChanStore, abortChanStore, errChanStore)
+
+	select {
+	case err = <-errChanStore:
+		t.Errorf("Got store error: %s", err.Error())
+		return
+	case <-doneChanStore:
+	}
+
+	doneChanRetr := make(chan struct{}, 1)
+	abortChanRetr := make(chan struct{}, 1)
+	errChanRetr := make(chan error, 1)
+
+	abortChanRetr <- struct{}{}
+	go ftpConn.Retrieve(FTP_MODE_ACTIVE, "tmp.txt", "temp.txt", doneChanRetr, abortChanRetr, errChanRetr)
+
+	select {
+	case err = <-errChanRetr:
+		t.Errorf("Got retr error: %s", err.Error())
+		return
+	case <-doneChanRetr:
+		// checking that the file has been deleted.
+
+		_, err := os.Open("temp.txt")
+		if !os.IsNotExist(err) {
+			t.Errorf("The file exists?: %s", err.Error())
+			return
+		}
+	}
 }

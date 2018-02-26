@@ -25,6 +25,14 @@ import (
 	"strings"
 )
 
+func (r *Response) IsAborted() bool {
+	return r.Code == 426
+}
+
+func (r *Response) IsSuccesfullyCompleted() bool {
+	return r.Code == 226
+}
+
 func (f *Conn) getFtpResponse() (*Response, error) {
 	// response, err := f.responseString()
 
@@ -34,7 +42,8 @@ func (f *Conn) getFtpResponse() (*Response, error) {
 	// n, err := f.control.Read(buf)
 	// response := string(buf[:n])
 
-	buff, _, err := f.controlReader.ReadLine()
+	// buff, _, err := f.controlReader.ReadLine()
+	buff, _, err := f.controlRw.ReadLine()
 
 	// fmt.Printf("I read: %d", n)
 
@@ -53,16 +62,20 @@ func (f *Conn) getFtpResponse() (*Response, error) {
 	if ftpResponse.IsFtpError() {
 		return nil, errors.New(ftpResponse.Error())
 	}
-
 	return ftpResponse, nil
 }
 
 func (f *Conn) writeCommand(cmd string) error {
-	_, err := f.control.Write([]byte(cmd))
+	f.controlRw.Flush()
+	if _, err := f.controlRw.WriteString(cmd); err != nil {
+		return nil
+	}
+	err := f.controlRw.Flush()
 	return err
 }
 
 func (f *Conn) writeCommandAndGetResponse(cmd string) (*Response, error) {
+	//if err := f.writeCommand(cmd); err != nil {
 	if err := f.writeCommand(cmd); err != nil {
 		return nil, err
 	}
@@ -164,10 +177,13 @@ func internalDial(remote string, config *Config) (*Conn, *Response, error) {
 		// listenersParams: lane.NewQueue(),
 		// listeners:       lane.NewQueue(),
 		// data:            lane.NewQueue(),
-		lastUsedMod:   FTP_MODE_IND,
-		controlReader: bufio.NewReader(conn),
+		lastUsedMod: FTP_MODE_IND,
+		// controlReader: bufio.NewReader(conn),
 		// rand:            rand.New(rand.NewSource(time.Now().UnixNano())),
 	}
+
+	reader, writer := bufio.NewReader(conn), bufio.NewWriter(conn)
+	ftpConn.controlRw = bufio.NewReadWriter(reader, writer)
 
 	response, err := ftpConn.getFtpResponse()
 	if err != nil {
