@@ -22,6 +22,15 @@ import (
 	"testing"
 )
 
+func authenticatedConn() (*Conn, *Response, error) {
+	return DialAndAuthenticate("localhost:2121", &Config{
+		DefaultMode: FTP_MODE_ACTIVE,
+		Username:    "anonymous",
+		Password:    "c@b.com",
+		LocalIP:     net.IP([]byte{127, 0, 0, 1}),
+	})
+}
+
 func TestDial(t *testing.T) {
 
 	ftpConn, resp, err := Dial("localhost:2121", &Config{
@@ -52,41 +61,27 @@ func TestDial(t *testing.T) {
 
 func TestDialAndAuthenticate(t *testing.T) {
 
-	ftpConn, resp, err := DialAndAuthenticate("localhost:2121", &Config{
-		DefaultMode: FTP_MODE_ACTIVE,
-		Username:    "anonymous",
-		Password:    "c@b.com",
-		LocalIP:     net.IP([]byte{127, 0, 0, 1}),
-	})
+	ftpConn, resp, err := authenticatedConn()
 
 	if err != nil {
-		t.Errorf("Error in conn: %s", err.Error())
-		return
+		t.Fatalf("Conn error: %s", err.Error())
 	}
 
 	defer ftpConn.Quit()
 
-	t.Log(resp.String())
+	t.Logf(resp.String())
 
 }
 
 func TestPort(t *testing.T) {
 
-	ftpConn, resp, err := DialAndAuthenticate("localhost:2121", &Config{
-		DefaultMode: FTP_MODE_ACTIVE,
-		Username:    "anonymous",
-		Password:    "c@b.com",
-		LocalIP:     net.IP([]byte{127, 0, 0, 1}),
-	})
+	ftpConn, resp, err := authenticatedConn()
 
 	if err != nil {
-		t.Errorf("Error in conn: %s", err.Error())
-		return
+		t.Fatalf("Conn error: %s", err.Error())
 	}
 
 	defer ftpConn.Quit()
-
-	// t.Log(resp.String())
 
 	resp, port, err := ftpConn.port()
 	if err != nil {
@@ -109,31 +104,26 @@ func TestIsPortAvailable(t *testing.T) {
 
 func TestParsePasvOk(t *testing.T) {
 
-	response := newFtpResponse("227 Entering Passive Mode (127,0,0,1,179,36)")
+	response, err := newFtpResponse("227 Entering Passive Mode (127,0,0,1,179,36)")
+	if err != nil {
+		t.Fatalf("Got error: %s", err.Error())
+	}
 	addr, err := parsePasv(response)
 	if err != nil {
-		t.Errorf("Got error: %s", err.Error())
-		return
+		t.Fatalf("Got error: %s", err.Error())
 	}
 	t.Logf("TCPAddr is: %s", addr.String())
 	if addr.Port != 45860 {
-		t.Errorf("Port is not correct")
-		return
+		t.Fatalf("Port is not correct")
 	}
 }
 
 func TestFileOpsActive(t *testing.T) {
 
-	ftpConn, _, err := DialAndAuthenticate("localhost:2121", &Config{
-		DefaultMode: FTP_MODE_ACTIVE,
-		Username:    "anonymous",
-		Password:    "c@b.com",
-		LocalIP:     net.IP([]byte{127, 0, 0, 1}),
-	})
+	ftpConn, _, err := authenticatedConn()
 
 	if err != nil {
-		t.Errorf("Error in conn: %s", err.Error())
-		return
+		t.Fatalf("Conn error: %s", err.Error())
 	}
 
 	defer ftpConn.Quit()
@@ -200,16 +190,11 @@ func TestFileOpsActive(t *testing.T) {
 }
 
 func TestFileOpsPassive(t *testing.T) {
-	ftpConn, _, err := DialAndAuthenticate("localhost:2121", &Config{
-		DefaultMode: FTP_MODE_ACTIVE,
-		Username:    "anonymous",
-		Password:    "c@b.com",
-		LocalIP:     net.IP([]byte{127, 0, 0, 1}),
-	})
+
+	ftpConn, _, err := authenticatedConn()
 
 	if err != nil {
-		t.Errorf("Error in conn: %s", err.Error())
-		return
+		t.Fatalf("Conn error: %s", err.Error())
 	}
 
 	defer ftpConn.Quit()
@@ -276,16 +261,10 @@ func TestFileOpsPassive(t *testing.T) {
 
 func TestDirOpsActive(t *testing.T) {
 
-	ftpConn, _, err := DialAndAuthenticate("localhost:2121", &Config{
-		DefaultMode: FTP_MODE_ACTIVE,
-		Username:    "anonymous",
-		Password:    "c@b.com",
-		LocalIP:     net.IP([]byte{127, 0, 0, 1}),
-	})
+	ftpConn, _, err := authenticatedConn()
 
 	if err != nil {
-		t.Errorf("Error in conn: %s", err.Error())
-		return
+		t.Fatalf("Conn error: %s", err.Error())
 	}
 
 	defer ftpConn.Quit()
@@ -351,7 +330,14 @@ func TestDirOpsActive(t *testing.T) {
 
 	select {
 	case err = <-errChanLsErr:
-		if !inverseResponse(err.Error()).IsFileNotExists() {
+		//if !inverseResponse(err.Error()).IsFileNotExists() {
+		// building a response from this error.
+		response, err := newFtpResponse(err.Error())
+		if err != nil {
+			t.Errorf(err.Error())
+			return
+		}
+		if !response.IsFileNotExists() {
 			t.Errorf("Got error: %s", err.Error())
 			return
 		}
@@ -378,16 +364,10 @@ func TestDirOpsActive(t *testing.T) {
 
 func TestDirOpsPassive(t *testing.T) {
 
-	ftpConn, _, err := DialAndAuthenticate("localhost:2121", &Config{
-		DefaultMode: FTP_MODE_ACTIVE,
-		Username:    "anonymous",
-		Password:    "c@b.com",
-		LocalIP:     net.IP([]byte{127, 0, 0, 1}),
-	})
+	ftpConn, _, err := authenticatedConn()
 
 	if err != nil {
-		t.Errorf("Error in conn: %s", err.Error())
-		return
+		t.Fatalf("Conn error: %s", err.Error())
 	}
 
 	defer ftpConn.Quit()
@@ -453,7 +433,12 @@ func TestDirOpsPassive(t *testing.T) {
 
 	select {
 	case err = <-errChanLsErr:
-		if !inverseResponse(err.Error()).IsFileNotExists() {
+		response, err := newFtpResponse(err.Error())
+		if err != nil {
+			t.Errorf(err.Error())
+			return
+		}
+		if !response.IsFileNotExists() {
 			t.Errorf("Got error: %s", err.Error())
 			return
 		}
@@ -480,16 +465,10 @@ func TestDirOpsPassive(t *testing.T) {
 
 func TestRename(t *testing.T) {
 
-	ftpConn, _, err := DialAndAuthenticate("localhost:2121", &Config{
-		DefaultMode: FTP_MODE_ACTIVE,
-		Username:    "anonymous",
-		Password:    "c@b.com",
-		LocalIP:     net.IP([]byte{127, 0, 0, 1}),
-	})
+	ftpConn, _, err := authenticatedConn()
 
 	if err != nil {
-		t.Errorf("Error in conn: %s", err.Error())
-		return
+		t.Fatalf("Conn error: %s", err.Error())
 	}
 
 	defer ftpConn.Quit()

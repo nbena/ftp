@@ -34,10 +34,10 @@ import (
 type Mode int
 
 const (
-	// FTP_ACTIVE means that for default the
+	// FTP_MODE_ACTIVE means that for default the
 	// active modality will be used.
 	FTP_MODE_ACTIVE = Mode(1)
-	// FTP_PASSIVE means that the passive mode
+	// FTP_MODE_PASSIVE means that the passive mode
 	// will be used.
 	FTP_MODE_PASSIVE = Mode(2)
 

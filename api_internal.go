@@ -46,7 +46,10 @@ func (f *Conn) getFtpResponse() (*Response, error) {
 
 	response := string(buff)
 
-	ftpResponse := newFtpResponse(response)
+	ftpResponse, err := newFtpResponse(response)
+	if err != nil {
+		return nil, err
+	}
 	if ftpResponse.IsFtpError() {
 		return nil, errors.New(ftpResponse.Error())
 	}
@@ -66,29 +69,40 @@ func (f *Conn) writeCommandAndGetResponse(cmd string) (*Response, error) {
 	return f.getFtpResponse()
 }
 
-func newFtpResponse(response string) *Response {
-	code, _ := strconv.Atoi(response[0:3])
-	msg := response[4:]
+// newFtpResponse builds a Response object from a string,
+// the string should be build in the following way:
+// <code> <message>; <message> can be omitted.
+func newFtpResponse(response string) (*Response, error) {
+	code, err := strconv.Atoi(response[0:3])
 
+	if err != nil {
+		return nil, err
+	}
+	var msg string
+	if len(response) < 4 {
+		msg = ""
+	} else {
+		msg = response[4:]
+	}
 	//msg = strings.TrimSpace(msg)
 	// msg = strings.TrimRight(msg, "\r\n")
 	// msg = strings.TrimRight(msg, "\r")
 	// msg = strings.TrimRight(msg, "\n")
 
-	return &Response{Code: code, Msg: msg}
+	return &Response{Code: code, Msg: msg}, nil
 }
 
-func inverseResponse(response string) *Response {
-	code, _ := strconv.Atoi(response[0:3])
-	msg := response[5:]
-
-	//msg = strings.TrimSpace(msg)
-	// msg = strings.TrimRight(msg, "\r\n")
-	// msg = strings.TrimRight(msg, "\r")
-	// msg = strings.TrimRight(msg, "\n")
-
-	return &Response{Code: code, Msg: msg}
-}
+// func inverseResponse(response string) *Response {
+// 	code, _ := strconv.Atoi(response[0:3])
+// 	msg := response[5:]
+//
+// 	//msg = strings.TrimSpace(msg)
+// 	// msg = strings.TrimRight(msg, "\r\n")
+// 	// msg = strings.TrimRight(msg, "\r")
+// 	// msg = strings.TrimRight(msg, "\n")
+//
+// 	return &Response{Code: code, Msg: msg}
+// }
 
 func parsePasv(response *Response) (*net.TCPAddr, error) {
 	ind := strings.Index(response.Msg, "(")
@@ -304,12 +318,14 @@ func (f *Conn) connectToAddr(addr *net.TCPAddr) (net.Conn, error) {
 	return net.Dial("tcp4", addr.String())
 }
 
-func (f *Conn) pasv() (*Response, error) {
-	return f.writeCommandAndGetResponse("PASV\r\n")
-}
+// func (f *Conn) pasv() (*Response, error) {
+// 	return f.writeCommandAndGetResponse("PASV\r\n")
+// }
 
+// pasvGetAddr issues the PASV command and then it
+// parses the response returning a TCP Addr.
 func (f *Conn) pasvGetAddr() (*net.TCPAddr, error) {
-	response, err := f.pasv()
+	response, err := f.writeCommandAndGetResponse("PASV\r\n")
 	if err != nil {
 		return nil, err
 	}
