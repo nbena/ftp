@@ -193,10 +193,12 @@ func TestFileOpsActive(t *testing.T) {
 	sizeResponse, gotSize, err := ftpConn.Size("tmp.txt")
 	if err != nil {
 		t.Errorf("Got error: %s", err.Error())
+		return
 	}
 
 	if int(size) != gotSize {
 		t.Errorf("Mismatched size, want: %d, got: %d", size, gotSize)
+		return
 	}
 
 	response, err := ftpConn.DeleteFile("tmp.txt")
@@ -660,7 +662,7 @@ func TestRetrAbort(t *testing.T) {
 	}
 }
 
-func TestParseTime(t *testing.T) {
+func TestParseTimeNoop(t *testing.T) {
 
 	response, err := newFtpResponse("213 20180226133244.000")
 	if err != nil {
@@ -713,6 +715,40 @@ func TestParseTime(t *testing.T) {
 		return
 	}
 
+	//finally a noop
+	noopResponse, err := ftpConn.Noop()
+	if err != nil {
+		t.Errorf(err.Error())
+		return
+	}
+
 	t.Logf("Raw: %s", gotResponse)
 	t.Logf("Time: %s", gotDate.String())
+	t.Logf("Noop: %s", noopResponse.String())
+}
+
+func TestAuthTLS(t *testing.T) {
+	// we expect to fail
+	// if tested against apache ftp server.
+
+	ftpConn1, _, err := DialAndAuthenticate("localhost:2121",
+		&Config{
+			Username: "anonymous",
+			Password: "c@b.i",
+			TLSOption: &TLSOption{
+				AllowSSL:       true,
+				ImplicitTLS:    false,
+				AuthTLSOnFirst: true,
+				AllowWeakHash:  true,
+				SkipVerify:     true,
+			},
+		},
+	)
+
+	if err != nil {
+		t.Errorf(err.Error())
+		return
+	}
+	defer ftpConn1.Quit()
+
 }

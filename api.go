@@ -20,6 +20,7 @@ import (
 	"crypto/tls"
 	"errors"
 	"io"
+	"log"
 	"net"
 	"os"
 	"path"
@@ -44,6 +45,15 @@ const (
 
 	// This needs to be implemented.
 	FTP_MODE_IND = Mode(0)
+
+	// AlreadyTLS is the error (error with this content)
+	// that is reported everytime an auth tls/ssl is issued
+	// on an already tls-ed-connection.
+	AlreadyTLS = "The control connection is already SSL or TLS"
+
+	// FailToTLS is the error msg returned in case no support for
+	// SSL and TLS has been found.
+	FailToTLS = "The server doesn't support neither SSL or TLS"
 )
 
 // Config contains the
@@ -56,13 +66,43 @@ type Config struct {
 	//Usually it is set to /dev/null or os.Stdin.
 	// ResponseFile *os.File
 	//Optionally, the tls configuration to use for
-	//the connection.
-	TLSConfig *tls.Config
+	//the connection. This is required only if
+	// you think TLS will be used. Note that the library
+	// will overwrite some parameters, including MinVersion,
+	// according to AllowSSL. Only version 3.0  is allowed. If SSL
+	// is not allowed, the MinVersion will be set to TLS 1.2,
+	// except if you set another version gt SSL3 lte TLS 1.2.
+	// This is done in the Dial function.
+	tlsConfig *tls.Config
+	TLSOption *TLSOption
 	LocalIP   net.IP
 	LocalPort int
 	Username  string
 	Password  string
 	FirstPort int
+}
+
+type TLSOption struct {
+	// If set to true, the first thing that the client
+	// will do will be a TLS handshake. If it fails,
+	// it'll issue an AUTH SSL/TLS.
+	ImplicitTLS bool
+	// If set to true, the first thing that the client
+	// will do will be an AUTH SSL/TLS.
+	// First, TLS, then SSL 3 if TLS is not supported.
+	AuthTLSOnFirst bool
+	// True allows SSL3.
+	AllowSSL bool
+	// Whether is set to true it allows to
+	// continue operation if no SSL/TLS is supported.
+	ContinueIfNoSSL bool
+	// If set to true, the list of ciphersuites
+	// will include the following algorithms:
+	// TLS_RSA_WITH_AES_128_CBC_SHA
+	// TLS_RSA_WITH_AES_256_CBC_SHA
+	AllowWeakHash bool
+	// same value of tls.Config.InsecureSkipVerify
+	SkipVerify bool
 }
 
 // Conn represents the top level object.
@@ -97,17 +137,6 @@ func (r *Response) Error() string {
 
 func (r *Response) String() string {
 	return strconv.Itoa(r.Code) + ": " + r.Msg
-}
-
-// IsFtpError returns true if the response represents
-// an error. That means that the code is >=500 && < 600.
-func (r *Response) IsFtpError() bool {
-	return r.Code >= 500 && r.Code < 600
-}
-
-// IsFileNotExists check if the code is 450.
-func (r *Response) IsFileNotExists() bool {
-	return r.Code == 450
 }
 
 // Dial connects to the ftp server.
@@ -546,4 +575,86 @@ func (f *Conn) Rename(from, to string) (*Response, error) {
 		return nil, err
 	}
 	return f.writeCommandAndGetResponse("RNTO " + to + "\r\n")
+}
+
+// Noop issues a NOOP command.
+func (f *Conn) Noop() (*Response, error) {
+	return f.writeCommandAndGetResponse("NOOP\r\n")
+}
+
+// AuthSSL starts an SSL connection over the control channel.
+// Support for SSL must be explicitely turn on into config
+// with the option 'AllowSSL' AND in TLSConfig.
+// If not, SSL will fail.  This is done for security reason,
+// SSL is no longer secure, support for SSL3 must be explicitely set.
+// Note that we expect a 234 code.
+func (f *Conn) AuthSSL() (*Response, error) {
+	if !f.config.TLSOption.AllowSSL {
+		return nil, errors.New("Explicit support for SSL3 is required")
+	}
+	if f.config.tlsConfig.MinVersion > tls.VersionSSL30 {
+		return nil, errors.New("Explicit support for SSL3 is required")
+	}
+	response, err := f.writeCommandAndGetResponse("AUTH SSL\r\n")
+	if err != nil {
+		return nil, err
+	}
+	if response.Code != 234 {
+		return nil, errors.New(response.Error())
+	}
+
+	f.control = tls.Client(f.control, f.config.tlsConfig)
+
+	tlsConn := f.control.(*tls.Conn)
+	err = tlsConn.Handshake()
+
+	// creating the new reader.
+	f.controlRw = bufio.NewReadWriter(
+		bufio.NewReader(f.control),
+		bufio.NewWriter(f.control))
+
+	return response, err
+}
+
+// func (f *Conn) auth(tls bool) (*Response, error) {
+// 	var response *Response
+// 	var err error
+// 	if tls {
+// 		response, err = f.AuthTLS()
+// 	} else {
+// 		response, err = f.AuthSSL()
+// 	}
+// 	return response, err
+// }
+
+// AuthTLS issues an AuthTLS command.
+// If the control connection is already TLS-ed an error will be
+// thrown, containing ftp.AlreadyTLS. If failback,
+// AuthSSL will be tried.
+func (f *Conn) AuthTLS(failback bool) (*Response, error) {
+	response, err := f.writeCommandAndGetResponse("AUTH TLS\r\n")
+	if err != nil {
+		return nil, err
+	}
+
+	log.Printf("Response: %s", response.String())
+
+	if failback && response.Code != 234 { // tryssl
+		return f.AuthSSL()
+	}
+	if response.Code != 234 {
+		return nil, errors.New(response.Error())
+	}
+
+	// everything is fine...
+	f.control = tls.Client(f.control, f.config.tlsConfig)
+	tlsConn := f.control.(*tls.Conn)
+	err = tlsConn.Handshake()
+
+	// creating the new reader.
+	f.controlRw = bufio.NewReadWriter(
+		bufio.NewReader(f.control),
+		bufio.NewWriter(f.control))
+
+	return response, err
 }

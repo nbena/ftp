@@ -15,22 +15,23 @@
 package main
 
 import (
-	"flag"
+	"fmt"
+	"os"
+
+	"github.com/nbena/ftp"
 )
 
-func parseArgv() ([]string, int, []bool) {
-	host := flag.String("host", "localhost", "the name of the ftp server")
-	port := flag.Int("port", 21, "the port to connect to")
-	defaultMode := flag.String("mode", "active", "the ftp modality")
-	printRes := flag.Bool("print-raw-response", false, "print or no the server responses")
-	username := flag.String("username", "anonymous", "the username")
-	password := flag.String("password", "c@b.com", "the password")
-	tls := flag.Bool("tls", true, "use or not a tunnel over TLS")
-	flag.Parse()
-	argv := []string{*host, *username, *password, *defaultMode}
-	return argv, *port, []bool{*printRes, *tls}
-}
-
 func main() {
+
+	parseFlags()
+
+	if showCiphers {
+		fmt.Printf("Ciphers: \n")
+		ciphers := ftp.CipherSuitesString(allowWeakHash)
+		for _, cipher := range ciphers {
+			fmt.Printf("%s\n", cipher)
+		}
+		os.Exit(0)
+	}
 
 }

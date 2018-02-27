@@ -34,6 +34,10 @@ func (r *Response) IsSuccesfullyCompleted() bool {
 	return r.Code == 226
 }
 
+func (r *Response) IsNotImplemented() bool {
+	return r.Code == 502
+}
+
 // IsFailToAccomplish checks if response.Code == 550.
 // 550 is an error used when the server can parse our
 // request but can't serve it. For example when we request a
@@ -41,6 +45,21 @@ func (r *Response) IsSuccesfullyCompleted() bool {
 // Another example is where modification time is not available.
 func (r *Response) IsFailToAccomplish() bool {
 	return r.Code == 550
+}
+
+func (r *Response) IsNotSupported() bool {
+	return r.Code == 431
+}
+
+// IsFtpError returns true if the response represents
+// an error. That means that the code is >=500 && < 600.
+func (r *Response) IsFtpError() bool {
+	return r.Code >= 500 && r.Code < 600
+}
+
+// IsFileNotExists check if the code is 450.
+func (r *Response) IsFileNotExists() bool {
+	return r.Code == 450
 }
 
 func (r *Response) getTime() (*time.Time, error) {
@@ -183,6 +202,97 @@ func parsePasv(response *Response) (*net.TCPAddr, error) {
 	}, nil
 }
 
+// CipherSuitesString shows the list of available ciphers.
+// If allowWeakHash is set (we strongly suggest to no)
+// ciphers with SHA are permitted. We don't permit
+// the use of RC4.
+func CipherSuitesString(allowWeakHash bool) []string {
+	ciphers := []string{
+		"tls.TLS_RSA_WITH_AES_128_CBC_SHA256",
+		"tls.TLS_RSA_WITH_AES_128_CBC_SHA256",
+		"tls.TLS_RSA_WITH_AES_256_GCM_SHA384",
+		"tls.TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256",
+		"tls.TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256",
+		"tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384",
+
+		"tls.TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305",
+		"tls.TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305",
+
+		"tls.TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA256",
+		"tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256",
+		"tls.TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384",
+	}
+	if allowWeakHash {
+		ciphers = append(ciphers,
+			"tls.TLS_RSA_WITH_AES_128_CBC_SHA",
+			"tls.TLS_RSA_WITH_AES_256_CBC_SHA",
+			"tls.TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA",
+			"tls.TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA",
+			"tls.TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA",
+			"tls.TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA",
+		)
+	}
+	return ciphers
+}
+
+func cipherSuites(allowWeakHash bool) []uint16 {
+	basicCipherSuites := []uint16{
+		tls.TLS_RSA_WITH_AES_128_CBC_SHA256,
+		tls.TLS_RSA_WITH_AES_128_CBC_SHA256,
+		tls.TLS_RSA_WITH_AES_256_GCM_SHA384,
+		tls.TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256,
+		tls.TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256,
+		tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+
+		tls.TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305,
+		tls.TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305,
+
+		tls.TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA256,
+		tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
+		tls.TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
+	}
+	if allowWeakHash {
+		basicCipherSuites = append(basicCipherSuites,
+			tls.TLS_RSA_WITH_AES_128_CBC_SHA,
+			tls.TLS_RSA_WITH_AES_256_CBC_SHA,
+			tls.TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA,
+			tls.TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA,
+			tls.TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA,
+			tls.TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA,
+		)
+	}
+	return basicCipherSuites
+}
+
+func (c *Config) initTLS() {
+	if c.TLSOption == nil {
+		c.TLSOption = &TLSOption{
+			AllowSSL:       false,
+			ImplicitTLS:    false,
+			AllowWeakHash:  false,
+			AuthTLSOnFirst: false,
+		}
+	}
+
+	// if c.TLSOption.AllowSSL || c.TLSOption.ImplicitTLS || c.TLSOption.AuthTLSOnFirst {
+	c.tlsConfig = &tls.Config{}
+	//}
+
+	if c.TLSOption.AllowSSL {
+		c.tlsConfig.MinVersion = tls.VersionSSL30
+	} else if c.TLSOption.ImplicitTLS || c.TLSOption.AuthTLSOnFirst {
+		if c.tlsConfig.MinVersion <= tls.VersionSSL30 {
+			c.tlsConfig.MinVersion = tls.VersionTLS12
+		}
+	}
+
+	if c.TLSOption.SkipVerify {
+		c.tlsConfig.InsecureSkipVerify = true
+	}
+
+	c.tlsConfig.CipherSuites = cipherSuites(c.TLSOption.AllowWeakHash)
+}
+
 func internalDial(remote string, config *Config) (*Conn, *Response, error) {
 	var conn net.Conn
 	var err error
@@ -194,10 +304,12 @@ func internalDial(remote string, config *Config) (*Conn, *Response, error) {
 		},
 	}
 
-	if config.TLSConfig == nil {
-		conn, err = dialer.Dial("tcp", remote)
+	config.initTLS()
+
+	if config.TLSOption.ImplicitTLS {
+		conn, err = tls.DialWithDialer(dialer, "tcp", remote, config.tlsConfig)
 	} else {
-		conn, err = tls.DialWithDialer(dialer, "tcp", remote, config.TLSConfig)
+		conn, err = dialer.Dial("tcp", remote)
 	}
 
 	if err != nil {
@@ -223,7 +335,57 @@ func internalDial(remote string, config *Config) (*Conn, *Response, error) {
 		return nil, nil, err
 	}
 
-	return ftpConn, response, nil
+	// if tlsonfirst we try a TLS.
+	// if config.AuthTLSOnFirst && config.TLSConfig.MinVersion == tls.VersionSSL30 && config.AllowSSL {
+	// 	sslResponse, err := ftpConn.AuthSSL()
+	// 	if err != nil {
+	// 		return nil, nil, err
+	// 	}
+	// 	if sslResponse.IsNotSupported() {
+	// 		return nil, nil, errors.New(sslResponse.Error())
+	// 	}
+	// } else if config.AuthTLSOnFirst {
+	// 	// // try tls
+	// 	// tlsResponse, err := ftpConn.AuthTLS()
+	// 	// if err != nil {
+	// 	// 	return nil, nil, err
+	// 	// }
+	// 	// if tlsResponse.IsNotSupported() {
+	// 	// 	// try ssl
+	// 	// 	sslResponse, err := ftpConn.AuthSSL()
+	// 	// 	if err != nil {
+	// 	// 		return nil, nil, err
+	// 	// 	}
+	// 	// 	if sslResponse.IsNotSupported() {
+	// 	// 		return nil, nil, errors.New(sslResponse.Error())
+	// 	// 	}
+	// 	// }
+	// 	tlsResponse, err := ftpConn.AuthTLS(true)
+	// 	if err != nil {
+	// 		return nil, nil, err
+	// 	}
+	// 	if tlsResponse.IsNotSupported() {
+	// 		return nil, nil, errors.New(tlsResponse.Error())
+	// 	}
+	// }
+	// always try tls.
+	var tlsResponse *Response
+	if config.TLSOption.AuthTLSOnFirst {
+		tlsResponse, err = ftpConn.AuthTLS(true)
+		if err != nil {
+			return nil, nil, err
+		}
+
+		if tlsResponse.IsNotSupported() {
+			if config.TLSOption.ContinueIfNoSSL {
+				err = errors.New(FailToTLS)
+			} else {
+				return nil, nil, errors.New(FailToTLS)
+			}
+		}
+	}
+
+	return ftpConn, response, err
 }
 
 // Port runs the PORT command on the local IP,
