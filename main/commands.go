@@ -17,6 +17,7 @@ package main
 import (
 	"fmt"
 	"strings"
+	"unsafe"
 )
 
 type cmd struct {
@@ -24,6 +25,7 @@ type cmd struct {
 	args     []string
 	required bool
 	n        int
+	fn       unsafe.Pointer
 }
 
 func parseZeroArg(s string) (*cmd, error) {

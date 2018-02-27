@@ -17,10 +17,16 @@ package main
 import (
 	"flag"
 	"fmt"
+	"net"
 	"os"
+	"strconv"
+	"strings"
 )
 
 var (
+	localIP         string
+	localIPParsed   net.IP
+	localPortParsed int
 	remote          string
 	defaultMode     string
 	username        string
@@ -37,6 +43,7 @@ var (
 )
 
 func parseFlags() {
+	flag.StringVar(&localIP, "local-address", "localhost:5354", "the address:port which the client binds in")
 	flag.StringVar(&remote, "remote", "localhost:2121", "name:port of ftp server")
 	flag.StringVar(&defaultMode, "connection-mode", "active", "the ftp mode, allowed: passive|active|default")
 	flag.StringVar(&username, "username", "anonymous", "the username")
@@ -66,5 +73,27 @@ func parseFlags() {
 			fmt.Fprintf(os.Stderr, err.Error())
 			os.Exit(1)
 		}
+	}
+
+	splittedIP := strings.Split(localIP, ":")
+	if len(splittedIP) != 2 {
+		fmt.Fprintf(os.Stderr, "Invalid format for local-address: %s", localIP)
+		os.Exit(1)
+	}
+
+	localPortParsed, err = strconv.Atoi(splittedIP[1])
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Invalid format for local-address: %s", localIP)
+		os.Exit(1)
+	}
+
+	if splittedIP[0] == "localhost" {
+		splittedIP[0] = "127.0.0.1"
+	}
+
+	localIPParsed = net.ParseIP(splittedIP[0])
+	if localIPParsed == nil {
+		fmt.Fprintf(os.Stderr, "Invalid format for local-address: %s", localIP)
+		os.Exit(1)
 	}
 }

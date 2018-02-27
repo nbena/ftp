@@ -288,6 +288,8 @@ func (c *Config) initTLS() {
 
 	if c.TLSOption.SkipVerify {
 		c.tlsConfig.InsecureSkipVerify = true
+	} else {
+		c.tlsConfig.InsecureSkipVerify = false
 	}
 
 	c.tlsConfig.CipherSuites = cipherSuites(c.TLSOption.AllowWeakHash)
