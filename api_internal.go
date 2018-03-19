@@ -119,7 +119,15 @@ func (f *Conn) getFtpResponse() (*Response, error) {
 
 func (f *Conn) writeCommand(cmd string) error {
 	f.controlRw.Flush()
+
+	// we try ascii.
+	// src := []byte(cmd)
+	// dst := make([]byte, ascii85.MaxEncodedLen(len(src)))
+
+	// ascii85.Encode(dst, src)
+
 	if _, err := f.controlRw.WriteString(cmd); err != nil {
+		// if _, err := f.controlRw.Write(dst); err != nil {
 		return nil
 	}
 	err := f.controlRw.Flush()
