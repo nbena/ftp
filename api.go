@@ -199,7 +199,9 @@ func (f *Conn) Quit() (*Response, error) {
 // When the abort command has been sent we wait for a response,
 // then the channel is closed and an empty struct wil be written on
 // doneChan.
-func (f *Conn) Store(filepath string, mode Mode,
+func (f *Conn) Store(
+	filepath string,
+	mode Mode,
 	doneChan chan<- struct{},
 	abortChan <-chan struct{},
 	errChan chan error) {
@@ -654,7 +656,8 @@ func (f *Conn) AuthTLS(failback bool) (*Response, error) {
 	// creating the new reader.
 	f.controlRw = bufio.NewReadWriter(
 		bufio.NewReader(f.control),
-		bufio.NewWriter(f.control))
+		bufio.NewWriter(f.control),
+	)
 
 	return response, err
 }

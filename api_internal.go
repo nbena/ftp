@@ -336,7 +336,6 @@ func internalDial(remote string, config *Config) (*Conn, *Response, error) {
 		// controlReader: bufio.NewReader(conn),
 		// rand:            rand.New(rand.NewSource(time.Now().UnixNano())),
 	}
-
 	reader, writer := bufio.NewReader(conn), bufio.NewWriter(conn)
 	ftpConn.controlRw = bufio.NewReadWriter(reader, writer)
 

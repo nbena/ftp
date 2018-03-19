@@ -21,6 +21,22 @@ import (
 	"github.com/nbena/ftp"
 )
 
+func getConn() (*ftp.Conn, *ftp.Response, error) {
+	return ftp.DialAndAuthenticate(remote,
+		&ftp.Config{
+			TLSOption: &ftp.TLSOption{
+				AllowSSL:        allowSSL3,
+				SkipVerify:      skipVerify,
+				AuthTLSOnFirst:  authTLSOnFirst,
+				ContinueIfNoSSL: continueIfNoTLS,
+				ImplicitTLS:     implicitTLS,
+			},
+			DefaultMode: ftp.FTP_MODE_IND,
+			LocalIP:     localIPParsed,
+			LocalPort:   localPortParsed,
+		})
+}
+
 func main() {
 
 	parseFlags()
@@ -34,26 +50,6 @@ func main() {
 		os.Exit(0)
 	}
 
-	conn, response, err := ftp.DialAndAuthenticate(remote,
-		&ftp.Config{
-			TLSOption: &ftp.TLSOption{
-				AllowSSL:        allowSSL3,
-				SkipVerify:      skipVerify,
-				AuthTLSOnFirst:  authTLSOnFirst,
-				ContinueIfNoSSL: continueIfNoTLS,
-				ImplicitTLS:     implicitTLS,
-			},
-			DefaultMode: ftp.FTP_MODE_IND,
-			LocalIP:     localIPParsed,
-			LocalPort:   localPortParsed,
-		})
-
-	if err != nil {
-		panic(err)
-	}
-
-	fmt.Printf("%s\n", response.String())
-
 	if len(parsedCommands) > 0 {
 		for _, v := range parsedCommands {
 			if v.cmd == CommandQuit.cmd {
@@ -63,6 +59,14 @@ func main() {
 		}
 	}
 
-	conn.Quit()
+	shell := newshell()
+	shell.askCredential()
+
+	conn, _, err := getConn()
+	if err != nil {
+		shell.printError(err.Error(), true)
+	}
+
+	defer conn.Quit()
 
 }

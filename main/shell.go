@@ -57,6 +57,13 @@ func (s *shell) print(msg string) {
 	fmt.Printf("%s\n", msg)
 }
 
+func (s *shell) printError(msg string, exit bool) {
+	fmt.Fprintf(os.Stderr, "%s\n", msg)
+	if exit {
+		os.Exit(1)
+	}
+}
+
 // func (s *shell) LogAndAuth(uri string) {
 // 	s.Print("Connecting and authenticating to " + uri + "...")
 // }

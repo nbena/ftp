@@ -17,15 +17,18 @@ package main
 import (
 	"fmt"
 	"strings"
-	"unsafe"
+
+	"github.com/nbena/ftp"
 )
+
+type ftpFunction func(...interface{}) (*ftp.Response, error)
 
 type cmd struct {
 	cmd      string
 	args     []string
 	required bool
 	n        int
-	fn       unsafe.Pointer
+	function ftpFunction
 }
 
 func parseZeroArg(s string) (*cmd, error) {
