@@ -418,6 +418,10 @@ func (f *Conn) port( /*ip net.IP*/ ) (*Response, int, error) {
 		return nil, 0, err
 	}
 
+	if response.Code != PortOk {
+		return nil, 0, newUnexpectedCodeError(PortOk, response.Code)
+	}
+
 	//if ok adding the listener to the listeners list
 	// f.listeners.Enqueue(listener)
 	return response, port, nil
@@ -548,6 +552,10 @@ func (f *Conn) pasvGetAddr() (*net.TCPAddr, error) {
 	response, err := f.writeCommandAndGetResponse("PASV\r\n")
 	if err != nil {
 		return nil, err
+	}
+
+	if response.Code != PasvOk {
+		return nil, newUnexpectedCodeError(PasvOk, response.Code)
 	}
 
 	addr, err := parsePasv(response)

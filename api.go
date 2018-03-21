@@ -19,6 +19,7 @@ import (
 	"bytes"
 	"crypto/tls"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"os"
@@ -53,7 +54,67 @@ const (
 	// FailToTLS is the error msg returned in case no support for
 	// SSL and TLS has been found.
 	FailToTLS = "The server doesn't support neither SSL or TLS"
+
+	// CdOk is the expected return code for a CWD is issued.
+	CdOk = 250
+
+	// DeleteFileOk is the expected return code when a file has been removed.
+	DeleteFileOk = 250
+
+	// DeleteDirOk is the expected return code when a file has been removed.
+	DeleteDirOk = 250
+
+	// LastModificationTimeOk is the expected returned code for
+	// MDTM command.
+	// see https://tools.ietf.org/html/rfc3659#page-8
+	LastModificationTimeOk = 213
+
+	// MkDirOk is the expected return code for a MKD command.
+	MkDirOk = 257
+
+	// NoopOk is the expected return code for a NOOP command.
+	NoopOk = 200
+
+	// PasvOk is the expected return code for a PASV command.
+	PasvOk = 227
+
+	// PortOk is the expected return code for a PORT command.
+	PortOk = 200
+
+	// PwdOk is the expected return code for a PWD command.
+	PwdOk = 257
+
+	// SizeOk is the expected returned code for a SIZE command.
+	// see https://tools.ietf.org/html/rfc3659#page-11
+	SizeOk = 213
 )
+
+// UnexpectedCodeError is the type that repesents an error that
+// occuts when server returns us a code different from the expected.
+type UnexpectedCodeError struct {
+	Expected int
+	Got      int
+}
+
+func newUnexpectedCodeError(expected, got int) error {
+	return &UnexpectedCodeError{
+		Expected: expected,
+		Got:      got,
+	}
+}
+
+func (e *UnexpectedCodeError) Error() string {
+	return fmt.Sprintf("unxpected code, want %d, got %d",
+		e.Expected,
+		e.Got)
+}
+
+func unexpectedErrorOrResponse(expected int, response *Response) (*Response, error) {
+	if response.Code != expected {
+		return nil, newUnexpectedCodeError(expected, response.Code)
+	}
+	return response, nil
+}
 
 // Config contains the
 //parameter used for the connection.
@@ -355,22 +416,38 @@ func (f *Conn) Store(
 
 // DeleteFile deletes the file.
 func (f *Conn) DeleteFile(filepath string) (*Response, error) {
-	return f.writeCommandAndGetResponse("DELE " + filepath + "\r\n")
+	resp, err := f.writeCommandAndGetResponse("DELE " + filepath + "\r\n")
+	if err != nil {
+		return nil, err
+	}
+	return unexpectedErrorOrResponse(DeleteFileOk, resp)
 }
 
 // MkDir creates a directory.
 func (f *Conn) MkDir(name string) (*Response, error) {
-	return f.writeCommandAndGetResponse("MKD " + name + "\r\n")
+	resp, err := f.writeCommandAndGetResponse("MKD " + name + "\r\n")
+	if err != nil {
+		return nil, err
+	}
+	return unexpectedErrorOrResponse(MkDirOk, resp)
 }
 
 // DeleteDir deletes a directory.
 func (f *Conn) DeleteDir(name string) (*Response, error) {
-	return f.writeCommandAndGetResponse("RMD " + name + "\r\n")
+	resp, err := f.writeCommandAndGetResponse("RMD " + name + "\r\n")
+	if err != nil {
+		return nil, err
+	}
+	return unexpectedErrorOrResponse(DeleteDirOk, resp)
 }
 
 // Cd change the working directory.
 func (f *Conn) Cd(path string) (*Response, error) {
-	return f.writeCommandAndGetResponse("CWD " + path + "\r\n")
+	resp, err := f.writeCommandAndGetResponse("CWD " + path + "\r\n")
+	if err != nil {
+		return nil, err
+	}
+	return unexpectedErrorOrResponse(CdOk, resp)
 }
 
 // Ls performs a LIST on the current directory.
@@ -397,8 +474,8 @@ func (f *Conn) Size(file string) (*Response, int, error) {
 	if err != nil {
 		return nil, 0, err
 	}
-	if response.Code != 213 {
-		return nil, 0, errors.New(response.Error())
+	if response.Code != SizeOk {
+		return nil, 0, newUnexpectedCodeError(SizeOk, response.Code)
 	}
 	// the size is the message.
 	size, err := strconv.Atoi(response.Msg)
@@ -416,6 +493,9 @@ func (f *Conn) LastModificationTime(file string) (*Response, *time.Time, error) 
 	if err != nil {
 		return nil, nil, err
 	}
+	if response.Code != LastModificationTimeOk {
+		return nil, nil, newUnexpectedCodeError(LastModificationTimeOk, response.Code)
+	}
 	date, err := response.getTime()
 	return response, date, err
 }
@@ -426,6 +506,9 @@ func (f *Conn) Pwd() (*Response, string, error) {
 	response, err := f.writeCommandAndGetResponse("PWD\r\n")
 	if err != nil {
 		return nil, "", err
+	}
+	if response.Code != PwdOk {
+		return nil, "", newUnexpectedCodeError(PwdOk, response.Code)
 	}
 	directory, err := getPwd(response)
 	return response, directory, err
@@ -590,7 +673,11 @@ func (f *Conn) Rename(from, to string) (*Response, error) {
 
 // Noop issues a NOOP command.
 func (f *Conn) Noop() (*Response, error) {
-	return f.writeCommandAndGetResponse("NOOP\r\n")
+	resp, err := f.writeCommandAndGetResponse("NOOP\r\n")
+	if err != nil {
+		return nil, err
+	}
+	return unexpectedErrorOrResponse(NoopOk, resp)
 }
 
 // AuthSSL starts an SSL connection over the control channel.

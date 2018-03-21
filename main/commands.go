@@ -74,6 +74,28 @@ func (c *cmd) apply(ftpConn *ftp.Conn, args ...interface{}) (interface{}, error)
 		return nil, nil
 	case "mkdir":
 		return ftpConn.MkDir(c.args[0])
+
+		// 2 arg
+	case "mv":
+		return ftpConn.Rename(c.args[0], c.args[1])
+	case "rm":
+		var responses []*ftp.Response
+		for _, filename := range c.args {
+			// we can't know if it's a file or not,
+			// trying some smart 'things'
+			var response *ftp.Response
+			var err error
+			if strings.Contains(filename, ".") {
+				// maybe it's a file?
+				response, err = ftpConn.DeleteFile(filename)
+				if err != nil {
+					response, err = ftpConn.DeleteDir(filename)
+				}
+			} else {
+
+			}
+		}
+		return responses, nil
 	}
 	return nil, nil
 }
