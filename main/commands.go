@@ -95,8 +95,15 @@ func (c *cmd) apply(ftpConn *ftp.Conn, args ...interface{}) (interface{}, error)
 					response, err = ftpConn.DeleteDir(filename)
 				}
 			} else {
-
+				response, err = ftpConn.DeleteDir(filename)
+				if err != nil {
+					response, err = ftpConn.DeleteFile(filename)
+				}
 			}
+			if err != nil {
+				return nil, err
+			}
+			responses = append(responses, response)
 		}
 		return responses, nil
 	}
