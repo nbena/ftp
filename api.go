@@ -16,17 +16,11 @@ package ftp
 
 import (
 	"bufio"
-	"bytes"
 	"crypto/tls"
-	"errors"
 	"fmt"
-	"io"
 	"net"
-	"os"
-	"path"
 	"strconv"
 	"sync"
-	"time"
 )
 
 // Mode is used as a constant
@@ -55,7 +49,10 @@ const (
 	// SSL and TLS has been found.
 	FailToTLS = "The server doesn't support neither SSL or TLS"
 
-	// CdOk is the expected return code for a CWD is issued.
+	// AbortOk is the expected return code for an ABORT code.
+	AbortOk = 426
+
+	// CdOk is the expected return code for a CWD.
 	CdOk = 250
 
 	// DeleteFileOk is the expected return code when a file has been removed.
@@ -64,10 +61,16 @@ const (
 	// DeleteDirOk is the expected return code when a file has been removed.
 	DeleteDirOk = 250
 
+	// FirstConnOk is what server writes when a connection occured.
+	FirstConnOk = 220
+
 	// LastModificationTimeOk is the expected returned code for
 	// MDTM command.
 	// see https://tools.ietf.org/html/rfc3659#page-8
 	LastModificationTimeOk = 213
+
+	// LoginOk is the expected return code for a PASS command.
+	LoginOk = 230
 
 	// MkDirOk is the expected return code for a MKD command.
 	MkDirOk = 257
@@ -84,9 +87,19 @@ const (
 	// PwdOk is the expected return code for a PWD command.
 	PwdOk = 257
 
+	// QuitOk is the expected return code for a QUIT command.
+	QuitOk = 221
+
 	// SizeOk is the expected returned code for a SIZE command.
 	// see https://tools.ietf.org/html/rfc3659#page-11
 	SizeOk = 213
+
+	// TransferOk is the expected returned code received upon
+	// a transfer completition.
+	TransferOk = 226
+
+	// UsernameOk is the expected return code for a USER command.
+	UsernameOk = 331
 )
 
 // UnexpectedCodeError is the type that repesents an error that
@@ -142,6 +155,7 @@ type Config struct {
 	FirstPort int
 }
 
+// TLSOption is the struct passed to configure TLS params.
 type TLSOption struct {
 	// If set to true, the first thing that the client
 	// will do will be a TLS handshake. If it fails,
@@ -197,563 +211,4 @@ func (r *Response) Error() string {
 
 func (r *Response) String() string {
 	return strconv.Itoa(r.Code) + ": " + r.Msg
-}
-
-// Dial connects to the ftp server.
-func Dial(remote string, config *Config) (*Conn, *Response, error) {
-	return internalDial(remote, config)
-}
-
-// DialAndAuthenticate connects to the server and
-// authenticates with it.
-func DialAndAuthenticate(remote string, config *Config) (*Conn, *Response, error) {
-	conn, _, err := internalDial(remote, config)
-	if err != nil {
-		// log.Printf("catch this as well")
-		return nil, nil, err
-	}
-	resp, err := conn.Authenticate()
-	if err != nil {
-		return nil, nil, err
-	}
-	return conn, resp, nil
-}
-
-// Authenticate sends credentials to the serve. It will
-// return an error if an error occurs in sending/receiving or
-// if the credential are wrong.
-func (f *Conn) Authenticate() (*Response, error) {
-
-	if _, err := f.writeCommandAndGetResponse("USER " + f.config.Username + "\r\n"); err != nil {
-		return nil, err
-	}
-
-	response, err := f.writeCommandAndGetResponse("PASS " + f.config.Password + "\r\n")
-	if err != nil {
-		return nil, err
-	}
-
-	return response, nil
-}
-
-//Quit close the current FTP session, it means that every transfer in progress
-//is closed too.
-func (f *Conn) Quit() (*Response, error) {
-	response, err := f.writeCommandAndGetResponse("QUIT\r\n")
-
-	if err != nil {
-		return nil, err
-	}
-
-	err = f.control.Close()
-	return response, err
-}
-
-// Store loads a file to the server. The file is 'filepath',
-// specifies which FTP you want to use,
-// doneCha notifies when transfering is finished, if an error
-// occurs, it will be written on errChan, casuing the function to immediately
-// exit.
-// If you want to abort this transfering, write to abort. That channel
-// should be buffered, because this function don't check until it starts transfering.
-// When the abort command has been sent we wait for a response,
-// then the channel is closed and an empty struct wil be written on
-// doneChan.
-func (f *Conn) Store(
-	filepath string,
-	mode Mode,
-	doneChan chan<- struct{},
-	abortChan <-chan struct{},
-	startingChan chan<- struct{},
-	errChan chan error) {
-
-	/*
-				This command tells the server to abort the previous FTP
-		service command and any associated transfer of data.  The
-		abort command may require "special action", as discussed in
-		the Section on FTP Commands, to force recognition by the
-		server.  No action is to be taken if the previous command
-		has been completed (including data transfer).  The control
-		connection is not to be closed by the server, but the data
-		connection must be closed.
-
-		There are two cases for the server upon receipt of this
-		command: (1) the FTP service command was already completed,
-		or (2) the FTP service command is still in progress.
-
-			 In the first case, the server closes the data connection
-			 (if it is open) and responds with a 226 reply, indicating
-			 that the abort command was successfully processed.
-
-			 In the second case, the server aborts the FTP service in
-			 progress and closes the data connection, returning a 426
-			 reply to indicate that the service request terminated
-			 abnormally.  The server then sends a 226 reply,
-			 indicating that the abort command was successfully
-			 processed.
-	*/
-
-	var sender io.WriteCloser
-
-	_, fileName := path.Split(filepath)
-
-	if mode == FTP_MODE_ACTIVE {
-
-		listener, err := f.openListener()
-		if err != nil {
-			errChan <- err
-			return
-		}
-		defer listener.Close()
-
-		if _, err = f.writeCommandAndGetResponse("STOR " + fileName + "\r\n"); err != nil {
-			errChan <- err
-			return
-		}
-
-		sender, err = listener.Accept()
-		if err != nil {
-			errChan <- err
-			return
-		}
-
-	} else if mode == FTP_MODE_PASSIVE {
-
-		addr, err := f.pasvGetAddr()
-		if err != nil {
-			errChan <- err
-			return
-		}
-
-		// write command
-		if _, err = f.writeCommandAndGetResponse("STOR " + fileName + "\r\n"); err != nil {
-			errChan <- err
-			return
-		}
-
-		sender, err = f.connectToAddr(addr)
-		if err != nil {
-			errChan <- err
-			return
-		}
-
-	}
-
-	var n int
-	file, err := os.Open(filepath)
-	if err != nil {
-		errChan <- err
-		return
-	}
-
-	info, err := file.Stat()
-	if err != nil {
-		errChan <- err
-		return
-	}
-
-	buffer := make([]byte, 1024)
-
-	// command has been issued, notifying on startingChan
-	startingChan <- struct{}{}
-
-	for n < int(info.Size()) {
-
-		select {
-		// starting polling on abort
-		case <-abortChan:
-			// it's not completely correct to close here the data channel,
-			// but some server will expect the client to do this.
-			sender.Close()
-			response, err := f.writeCommandAndGetResponse("ABOR\r\n")
-			if err != nil {
-				errChan <- err
-				return
-			}
-
-			// if 426 we have to wait for another response.
-			// if 226 the transfer is complete
-			if response.Code == 426 && response.Code != 226 {
-				// ok, wait for another.
-				_, err := f.getFtpResponse()
-				if err != nil {
-					// very bad
-					errChan <- err
-					return
-				}
-			}
-			doneChan <- struct{}{}
-			return
-
-		default: // no aborting
-			read, err := file.Read(buffer)
-			if err != nil {
-				sender.Close()
-				errChan <- err
-				return
-			}
-			n += read
-			_, err = sender.Write(buffer[:read])
-			if err != nil {
-				sender.Close()
-				errChan <- err
-				return
-			}
-		}
-	}
-
-	// until I close the data connection it doesn't answer me.
-	sender.Close()
-
-	// when completed reading response.
-	if _, err := f.getFtpResponse(); err != nil {
-		errChan <- err
-		return
-	}
-
-	doneChan <- struct{}{}
-}
-
-// DeleteFile deletes the file.
-func (f *Conn) DeleteFile(filepath string) (*Response, error) {
-	resp, err := f.writeCommandAndGetResponse("DELE " + filepath + "\r\n")
-	if err != nil {
-		return nil, err
-	}
-	return unexpectedErrorOrResponse(DeleteFileOk, resp)
-}
-
-// MkDir creates a directory.
-func (f *Conn) MkDir(name string) (*Response, error) {
-	resp, err := f.writeCommandAndGetResponse("MKD " + name + "\r\n")
-	if err != nil {
-		return nil, err
-	}
-	return unexpectedErrorOrResponse(MkDirOk, resp)
-}
-
-// DeleteDir deletes a directory.
-func (f *Conn) DeleteDir(name string) (*Response, error) {
-	resp, err := f.writeCommandAndGetResponse("RMD " + name + "\r\n")
-	if err != nil {
-		return nil, err
-	}
-	return unexpectedErrorOrResponse(DeleteDirOk, resp)
-}
-
-// Cd change the working directory.
-func (f *Conn) Cd(path string) (*Response, error) {
-	resp, err := f.writeCommandAndGetResponse("CWD " + path + "\r\n")
-	if err != nil {
-		return nil, err
-	}
-	return unexpectedErrorOrResponse(CdOk, resp)
-}
-
-// Ls performs a LIST on the current directory.
-// The result is written on doneChan, one row per item. Eventual errors will be
-// written on errChan, causing the function to immediately exit.
-func (f *Conn) Ls(mode Mode, doneChan chan<- []string, errChan chan<- error) {
-	f.internalLs(mode, "", doneChan, errChan)
-}
-
-// LsDir performs a LIST on the given directory/file.
-// The result is written on doneChan, one row per item. Eventual errors will be
-// written on errChan, causing the function to immediately exit.
-func (f *Conn) LsDir(mode Mode, path string, doneChan chan<- []string, errChan chan<- error) {
-	f.internalLs(mode, path, doneChan, errChan)
-}
-
-// Size returns the size of the specified file. The size
-// is not the size of the file but the number of bytes that
-// will be transmitted if the file would have been downloaded.
-// According to RFC 3659, a 213 code must be returned if the
-// request is ok. If another code is returned, an error will be thrown.
-func (f *Conn) Size(file string) (*Response, int, error) {
-	response, err := f.writeCommandAndGetResponse("SIZE " + file + "\r\n")
-	if err != nil {
-		return nil, 0, err
-	}
-	if response.Code != SizeOk {
-		return nil, 0, newUnexpectedCodeError(SizeOk, response.Code)
-	}
-	// the size is the message.
-	size, err := strconv.Atoi(response.Msg)
-	if err != nil {
-		return nil, 0, err
-	}
-	return response, size, nil
-}
-
-// LastModificationTime returns the last modification file of the given file in
-// UTC format. The raw response is accessible, as well as the date (for sure)
-// and an eventual error occured.
-func (f *Conn) LastModificationTime(file string) (*Response, *time.Time, error) {
-	response, err := f.writeCommandAndGetResponse("MDTM " + file + "\r\n")
-	if err != nil {
-		return nil, nil, err
-	}
-	if response.Code != LastModificationTimeOk {
-		return nil, nil, newUnexpectedCodeError(LastModificationTimeOk, response.Code)
-	}
-	date, err := response.getTime()
-	return response, date, err
-}
-
-// Pwd returns the current working directory.
-// It returns the raw response too.
-func (f *Conn) Pwd() (*Response, string, error) {
-	response, err := f.writeCommandAndGetResponse("PWD\r\n")
-	if err != nil {
-		return nil, "", err
-	}
-	if response.Code != PwdOk {
-		return nil, "", newUnexpectedCodeError(PwdOk, response.Code)
-	}
-	directory, err := getPwd(response)
-	return response, directory, err
-}
-
-// Retrieve download a file located at filepathSrc to filepathDest.
-// When finished, it writes into doneChan. Any error, that'll make it immediately exits,
-// is written into errChan.
-func (f *Conn) Retrieve(mode Mode,
-	filepathSrc,
-	filepathDest string,
-	doneChan chan<- struct{},
-	abortChan <-chan struct{},
-	startingChan chan<- struct{},
-	errChan chan<- error) {
-
-	var receiver io.ReadCloser
-
-	if mode == FTP_MODE_ACTIVE {
-
-		//opening a listener.
-		listener, err := f.openListener()
-		if err != nil {
-			errChan <- err
-			return
-		}
-		defer listener.Close()
-
-		// sending command.
-		if _, err = f.writeCommandAndGetResponse("RETR " + filepathSrc + "\r\n"); err != nil {
-			errChan <- err
-			return
-		}
-
-		// accept connection.
-		receiver, err = listener.Accept()
-		if err != nil {
-			errChan <- err
-			return
-		}
-	} else if mode == FTP_MODE_PASSIVE {
-
-		addr, err := f.pasvGetAddr()
-		if err != nil {
-			errChan <- err
-			return
-		}
-
-		// write command
-		if _, err = f.writeCommandAndGetResponse("RETR " + filepathSrc + "\r\n"); err != nil {
-			errChan <- err
-			return
-		}
-
-		receiver, err = f.connectToAddr(addr)
-		if err != nil {
-			errChan <- err
-			return
-		}
-	}
-
-	file, err := os.Create(filepathDest)
-	if err != nil {
-		errChan <- err
-		return
-	}
-
-	// starting reading into receiver
-	buffer := make([]byte, 1024)
-	loop := true
-
-	// command has been issued, notify on startingChan
-	startingChan <- struct{}{}
-
-	for loop {
-
-		select {
-
-		case <-abortChan:
-			receiver.Close()
-			var response *Response //declaring here just to prevent go vet.
-			response, err = f.writeCommandAndGetResponse("ABOR\r\n")
-			if err != nil {
-				errChan <- err
-
-				os.Remove(file.Name()) //skipping the error.
-				return
-			}
-
-			// if 426 we have to wait for another response.
-			// if 226 the transfer is complete
-			if response.Code == 426 && response.Code != 226 {
-				// ok, wait for another.
-				_, err = f.getFtpResponse()
-				if err != nil {
-					// very bad
-					errChan <- err
-					return
-				}
-			}
-
-			err = os.Remove(file.Name())
-			if err != nil {
-				errChan <- err
-			} else {
-				doneChan <- struct{}{}
-			}
-			return
-
-		default:
-
-			_, err = receiver.Read(buffer)
-			if err != nil && err == io.EOF {
-				// I know that it is ugly
-				// but in this way we can skip some if.
-				// EOF means the connection has been closed.
-				loop = false
-				continue // before there was a break but it'll make
-				// exiting just from the select.
-			} else if err != nil {
-				receiver.Close()
-				errChan <- err
-				return
-			}
-
-			// so we can skip null bytes that are added
-			/// to fill the buffer size.
-			index := bytes.IndexByte(buffer, 0)
-			if index == -1 {
-				index = len(buffer)
-			}
-
-			if _, err = file.Write(buffer[:index]); err != nil {
-				// closing the connection as well
-				receiver.Close()
-				errChan <- err
-				return
-			}
-		}
-	}
-
-	// now getting the response.
-	// it's not unreachable code...
-	_, err = f.getFtpResponse()
-	if err != nil {
-		errChan <- err
-		return
-	}
-
-	doneChan <- struct{}{}
-}
-
-// Rename renames a file called 'from' to a file called 'to'.
-// It returns just the last response.
-func (f *Conn) Rename(from, to string) (*Response, error) {
-	if _, err := f.writeCommandAndGetResponse("RNFR " + from + "\r\n"); err != nil {
-		// fmt.Printf("First: %s\n", response.String())
-		return nil, err
-	}
-	return f.writeCommandAndGetResponse("RNTO " + to + "\r\n")
-}
-
-// Noop issues a NOOP command.
-func (f *Conn) Noop() (*Response, error) {
-	resp, err := f.writeCommandAndGetResponse("NOOP\r\n")
-	if err != nil {
-		return nil, err
-	}
-	return unexpectedErrorOrResponse(NoopOk, resp)
-}
-
-// AuthSSL starts an SSL connection over the control channel.
-// Support for SSL must be explicitely turn on into config
-// with the option 'AllowSSL' AND in TLSConfig.
-// If not, SSL will fail.  This is done for security reason,
-// SSL is no longer secure, support for SSL3 must be explicitely set.
-// Note that we expect a 234 code.
-func (f *Conn) AuthSSL() (*Response, error) {
-	if !f.config.TLSOption.AllowSSL {
-		return nil, errors.New("Explicit support for SSL3 is required")
-	}
-	if f.config.tlsConfig.MinVersion > tls.VersionSSL30 {
-		return nil, errors.New("Explicit support for SSL3 is required")
-	}
-	response, err := f.writeCommandAndGetResponse("AUTH SSL\r\n")
-	if err != nil {
-		return nil, err
-	}
-	if response.Code != 234 {
-		return nil, errors.New(response.Error())
-	}
-
-	f.control = tls.Client(f.control, f.config.tlsConfig)
-
-	tlsConn := f.control.(*tls.Conn)
-	err = tlsConn.Handshake()
-
-	// creating the new reader.
-	f.controlRw = bufio.NewReadWriter(
-		bufio.NewReader(f.control),
-		bufio.NewWriter(f.control))
-
-	return response, err
-}
-
-// func (f *Conn) auth(tls bool) (*Response, error) {
-// 	var response *Response
-// 	var err error
-// 	if tls {
-// 		response, err = f.AuthTLS()
-// 	} else {
-// 		response, err = f.AuthSSL()
-// 	}
-// 	return response, err
-// }
-
-// AuthTLS issues an AuthTLS command.
-// If the control connection is already TLS-ed an error will be
-// thrown, containing ftp.AlreadyTLS. If failback,
-// AuthSSL will be tried.
-func (f *Conn) AuthTLS(failback bool) (*Response, error) {
-	response, err := f.writeCommandAndGetResponse("AUTH TLS\r\n")
-	if err != nil {
-		return nil, err
-	}
-
-	// log.Printf("Response: %s", response.String())
-
-	if failback && response.Code != 234 { // tryssl
-		return f.AuthSSL()
-	}
-	if response.Code != 234 {
-		return nil, errors.New(response.Error())
-	}
-
-	// everything is fine...
-	f.control = tls.Client(f.control, f.config.tlsConfig)
-	tlsConn := f.control.(*tls.Conn)
-	err = tlsConn.Handshake()
-
-	// creating the new reader.
-	f.controlRw = bufio.NewReadWriter(
-		bufio.NewReader(f.control),
-		bufio.NewWriter(f.control),
-	)
-
-	return response, err
 }

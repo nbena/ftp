@@ -26,9 +26,9 @@ import (
 	"time"
 )
 
-func (r *Response) IsAborted() bool {
-	return r.Code == 426
-}
+// func (r *Response) IsAborted() bool {
+// 	return r.Code == 426
+// }
 
 func (r *Response) IsSuccesfullyCompleted() bool {
 	return r.Code == 226
@@ -342,6 +342,9 @@ func internalDial(remote string, config *Config) (*Conn, *Response, error) {
 	response, err := ftpConn.getFtpResponse()
 	if err != nil {
 		return nil, nil, err
+	}
+	if response.Code != FirstConnOk {
+		return nil, nil, newUnexpectedCodeError(FirstConnOk, response.Code)
 	}
 
 	// if tlsonfirst we try a TLS.

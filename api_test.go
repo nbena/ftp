@@ -157,8 +157,8 @@ func TestFileOpsActive(t *testing.T) {
 
 	size := stat.Size()
 
-	go ftpConn.Store("tmp.txt", FTP_MODE_ACTIVE, doneChanStore, abortChanStore,
-		startingChanStore, errChanStore)
+	go ftpConn.Store(FTP_MODE_ACTIVE, "tmp.txt", "tmp.txt", doneChanStore, abortChanStore,
+		startingChanStore, errChanStore, false)
 
 	loop := true
 	for loop {
@@ -179,7 +179,8 @@ func TestFileOpsActive(t *testing.T) {
 	startingChanRetr := make(chan struct{}, 1)
 	errChanRetr := make(chan error, 1)
 
-	go ftpConn.Retrieve(FTP_MODE_ACTIVE, "tmp.txt", "temp_get.txt", doneChanRetr,
+	go ftpConn.Retrieve(FTP_MODE_ACTIVE, "tmp.txt", "temp_get.txt",
+		doneChanRetr,
 		abortChanRetr,
 		startingChanRetr,
 		errChanRetr)
@@ -201,6 +202,7 @@ func TestFileOpsActive(t *testing.T) {
 	//reading downloaded file.
 	var content []byte // just to prevent go vet
 	content, err = ioutil.ReadFile("temp_get.txt")
+	defer os.Remove("temp_get.txt")
 	if err != nil {
 		t.Errorf("Got error: %s", err.Error())
 		return
@@ -263,8 +265,8 @@ func TestFileOpsPassive(t *testing.T) {
 	startingChanStore := make(chan struct{}, 1)
 	errChanStore := make(chan error, 1)
 
-	go ftpConn.Store("tmp.txt", FTP_MODE_PASSIVE, doneChanStore, abortChanStore,
-		startingChanStore, errChanStore)
+	go ftpConn.Store(FTP_MODE_PASSIVE, "tmp.txt", "tmp.txt", doneChanStore, abortChanStore,
+		startingChanStore, errChanStore, false)
 
 	loop := true
 	for loop {
@@ -305,6 +307,7 @@ func TestFileOpsPassive(t *testing.T) {
 	//reading downloaded file.
 	var content []byte // just to prevent go vet
 	content, err = ioutil.ReadFile("temp_get.txt")
+	defer os.Remove("temp_get.txt")
 	if err != nil {
 		t.Errorf("Got error: %s", err.Error())
 		return
@@ -558,8 +561,8 @@ func TestRename(t *testing.T) {
 	startingChanStore := make(chan struct{}, 1)
 	errChanStore := make(chan error, 1)
 
-	go ftpConn.Store("tmp.txt", FTP_MODE_PASSIVE, doneChanStore, abortChanStore,
-		startingChanStore, errChanStore)
+	go ftpConn.Store(FTP_MODE_PASSIVE, "tmp.txt", "tmp.txt", doneChanStore, abortChanStore,
+		startingChanStore, errChanStore, false)
 
 	loop := true
 	for loop {
@@ -606,7 +609,7 @@ func TestRename(t *testing.T) {
 
 }
 
-func TestStoreAbort(t *testing.T) {
+func TestStoreAbortBefore(t *testing.T) {
 
 	ftpConn, _, err := authenticatedConn()
 
@@ -633,7 +636,7 @@ func TestStoreAbort(t *testing.T) {
 	doneChanStore := make(chan struct{}, 1)
 	abortChanStore := make(chan struct{}, 1)
 	startingChanStore := make(chan struct{}, 1)
-	errChanStore := make(chan error, 1)
+	errChanStore := make(chan error, 2)
 
 	// writing immediately to
 	// abortChanStore to be sure
@@ -643,18 +646,76 @@ func TestStoreAbort(t *testing.T) {
 	// the function will never really use the abort.
 	abortChanStore <- struct{}{}
 
-	go ftpConn.Store("tmp.txt", FTP_MODE_ACTIVE, doneChanStore, abortChanStore,
-		startingChanStore, errChanStore)
+	go ftpConn.Store(FTP_MODE_ACTIVE, "tmp.txt", "tmp.txt", doneChanStore, abortChanStore,
+		startingChanStore, errChanStore, true)
 
 	select {
 	case err = <-errChanStore:
 		t.Errorf("Got store error: %s", err.Error())
 		return
 	case <-doneChanStore:
+		// checking that the file has been deleted.
+		doneChanLs := make(chan []string, 1)
+		errChanLs := make(chan error, 1)
+		ftpConn.Ls(FTP_MODE_ACTIVE, doneChanLs, errChanLs)
+		select {
+		case err = <-errChanLs:
+			t.Errorf("Got LS error: %s", err.Error())
+			return
+		case ls := <-doneChanLs:
+			for _, entry := range ls {
+				if strings.Contains(entry, "tmp.txt") {
+					t.Errorf("Found file: %s", entry)
+					return
+				}
+			}
+		}
 	}
 }
 
-func TestRetrAbort(t *testing.T) {
+func TestStoreAbortAfter(t *testing.T) {
+
+	ftpConn, _, err := authenticatedConn()
+
+	if err != nil {
+		t.Fatalf("Conn error: %s", err.Error())
+	}
+
+	defer ftpConn.Quit()
+
+	fileContent := []byte("hello this is an example")
+	file, err := os.Create("tmp.txt")
+	defer os.Remove("tmp.txt")
+
+	if err != nil {
+		t.Errorf(err.Error())
+		return
+	}
+	_, err = file.Write(fileContent)
+	if err != nil {
+		t.Errorf(err.Error())
+		return
+	}
+
+	doneChanStore := make(chan struct{}, 1)
+	abortChanStore := make(chan struct{}, 1)
+	startingChanStore := make(chan struct{}, 1)
+	errChanStore := make(chan error, 1)
+
+	go ftpConn.Store(FTP_MODE_ACTIVE, "tmp.txt", "tmp.txt", doneChanStore, abortChanStore,
+		startingChanStore, errChanStore, false)
+
+	select {
+	case err = <-errChanStore:
+		t.Errorf("Got store error: %s", err.Error())
+		return
+	case <-doneChanStore:
+		// t.Logf("Transfer completed, now aborting")
+		abortChanStore <- struct{}{}
+	}
+}
+
+func TestRetrAbortBefore(t *testing.T) {
 	ftpConn, _, err := authenticatedConn()
 
 	if err != nil {
@@ -683,8 +744,8 @@ func TestRetrAbort(t *testing.T) {
 	startingChanStore := make(chan struct{}, 1)
 	errChanStore := make(chan error, 1)
 
-	go ftpConn.Store("tmp.txt", FTP_MODE_ACTIVE, doneChanStore, abortChanStore,
-		startingChanStore, errChanStore)
+	go ftpConn.Store(FTP_MODE_ACTIVE, "tmp.txt", "tmp.txt", doneChanStore, abortChanStore,
+		startingChanStore, errChanStore, false)
 
 	select {
 	case err = <-errChanStore:
@@ -714,6 +775,78 @@ func TestRetrAbort(t *testing.T) {
 			t.Errorf("The file exists?: %s", err.Error())
 			return
 		}
+	}
+}
+
+func TestRetrAbortAfter(t *testing.T) {
+	ftpConn, _, err := authenticatedConn()
+
+	if err != nil {
+		t.Fatalf("Conn error: %s", err.Error())
+	}
+
+	defer ftpConn.Quit()
+
+	fileContent := []byte("hello this is an example")
+	file, err := os.Create("tmp.txt")
+	if err != nil {
+		t.Errorf(err.Error())
+		return
+	}
+
+	defer os.Remove("tmp.txt")
+
+	_, err = file.Write(fileContent)
+	if err != nil {
+		t.Errorf(err.Error())
+		return
+	}
+
+	doneChanStore := make(chan struct{}, 1)
+	abortChanStore := make(chan struct{}, 1)
+	startingChanStore := make(chan struct{}, 1)
+	errChanStore := make(chan error, 1)
+
+	go ftpConn.Store(FTP_MODE_ACTIVE, "tmp.txt", "tmp.txt", doneChanStore, abortChanStore,
+		startingChanStore, errChanStore, false)
+
+	select {
+	case err = <-errChanStore:
+		t.Errorf("Got store error: %s", err.Error())
+		return
+	case <-doneChanStore:
+	}
+
+	doneChanRetr := make(chan struct{}, 1)
+	abortChanRetr := make(chan struct{}, 1)
+	startingChanRetr := make(chan struct{}, 1)
+	errChanRetr := make(chan error, 1)
+
+	go ftpConn.Retrieve(FTP_MODE_ACTIVE, "tmp.txt", "temp.txt", doneChanRetr,
+		abortChanRetr, startingChanRetr, errChanRetr)
+
+	select {
+	case err = <-errChanRetr:
+		t.Errorf("Got retr error: %s", err.Error())
+		return
+	case <-doneChanRetr:
+		// checking that the file has been locally deleted
+		// here have no sense, because the function immediately
+		// exit after everything had been done.
+		abortChanRetr <- struct{}{}
+
+		// 	_, err := os.Open("temp.txt")
+		// 	if err != nil {
+		// 		if !os.IsNotExist(err) {
+		// 			t.Errorf("The file exists?: %s", err.Error())
+		// 			return
+		// 		}
+		// 		t.Logf("File has been correctly deleted")
+		// 	} else {
+		// 		t.Errorf("File hasn't been deleted!")
+		// 	}
+		// }
+		os.Remove("temp.txt")
 	}
 }
 
@@ -756,8 +889,8 @@ func TestParseTimeNoop(t *testing.T) {
 	startingChanStore := make(chan struct{}, 1)
 	errChanStore := make(chan error, 1)
 
-	go ftpConn.Store("tmp.txt", FTP_MODE_ACTIVE, doneChanStore, abortChanStore,
-		startingChanStore, errChanStore)
+	go ftpConn.Store(FTP_MODE_ACTIVE, "tmp.txt", "tmp.txt", doneChanStore, abortChanStore,
+		startingChanStore, errChanStore, false)
 
 	loop := true
 	for loop {
