@@ -31,12 +31,49 @@ type cmd struct {
 	function ftpFunction
 }
 
-func (c *cmd) apply(ftpConn *ftp.Conn) (*ftp.Response, error) {
+func (c *cmd) apply(ftpConn *ftp.Conn, args ...interface{}) (interface{}, error) {
 	switch c.cmd {
+
+	// no args
 	case "auth-tls":
 		return ftpConn.AuthTLS(allowSSL3)
 	case "auth-ssl":
 		return ftpConn.AuthSSL()
+	case "quit":
+		return ftpConn.Quit()
+	case "noop":
+		return ftpConn.Noop()
+	case "pwd":
+		_, pwd, err := ftpConn.Pwd()
+		if err != nil {
+			return nil, err
+		}
+		return pwd, nil
+
+		// 1 arg
+	case "cd":
+		return ftpConn.Cd(c.args[0])
+	case "info":
+		_, size, err := ftpConn.Size(c.args[0])
+		if err != nil {
+			return nil, err
+		}
+		_, lastModificationTime, err := ftpConn.LastModificationTime(c.args[0])
+		if err != nil {
+			return nil, err
+		}
+		return []interface{}{
+			size,
+			lastModificationTime,
+		}, nil
+	case "ls":
+		doneChan := args[0].(chan<- []string)
+		errChan := args[1].(chan<- error)
+		ftpConn.LsDir(ftp.FTP_MODE_IND, c.args[0], doneChan, errChan)
+		// nil, nil because returns value are in the channels.
+		return nil, nil
+	case "mkdir":
+		return ftpConn.MkDir(c.args[0])
 	}
 	return nil, nil
 }

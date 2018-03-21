@@ -37,6 +37,7 @@ var (
 	continueIfNoTLS bool
 	allowWeakHash   bool
 	skipVerify      bool
+	serverName      string
 	showCiphers     bool
 	commands        string
 	parsedCommands  []*cmd

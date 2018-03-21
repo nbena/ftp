@@ -146,6 +146,7 @@ func TestFileOpsActive(t *testing.T) {
 
 	doneChanStore := make(chan struct{}, 1)
 	abortChanStore := make(chan struct{}, 1)
+	startingChanStore := make(chan struct{}, 1)
 	errChanStore := make(chan error, 1)
 
 	stat, err := file.Stat()
@@ -156,38 +157,58 @@ func TestFileOpsActive(t *testing.T) {
 
 	size := stat.Size()
 
-	go ftpConn.Store("tmp.txt", FTP_MODE_ACTIVE, doneChanStore, abortChanStore, errChanStore)
+	go ftpConn.Store("tmp.txt", FTP_MODE_ACTIVE, doneChanStore, abortChanStore,
+		startingChanStore, errChanStore)
 
-	select {
-	case err = <-errChanStore:
-		t.Errorf("Got error: %s", err.Error())
-		return
-	case <-doneChanStore:
+	loop := true
+	for loop {
+		select {
+		case err = <-errChanStore:
+			t.Errorf("Got error: %s", err.Error())
+			return
+		case <-doneChanStore:
+			t.Logf("Store transfer has finished\n")
+			loop = false
+		case <-startingChanStore:
+			t.Logf("Store transfer has started\n")
+		}
 	}
 
 	doneChanRetr := make(chan struct{}, 1)
 	abortChanRetr := make(chan struct{}, 1)
+	startingChanRetr := make(chan struct{}, 1)
 	errChanRetr := make(chan error, 1)
-	go ftpConn.Retrieve(FTP_MODE_ACTIVE, "tmp.txt", "temp_get.txt", doneChanRetr, abortChanRetr, errChanRetr)
 
-	select {
-	case err = <-errChanRetr:
-		t.Errorf("Got error: %s", err.Error())
-		return
-	case <-doneChanRetr:
+	go ftpConn.Retrieve(FTP_MODE_ACTIVE, "tmp.txt", "temp_get.txt", doneChanRetr,
+		abortChanRetr,
+		startingChanRetr,
+		errChanRetr)
 
-		//reading downloaded file.
-		var content []byte // just to prevent go vet
-		content, err = ioutil.ReadFile("temp_get.txt")
-		if err != nil {
+	loop = true
+	for loop {
+		select {
+		case err = <-errChanRetr:
 			t.Errorf("Got error: %s", err.Error())
 			return
+		case <-startingChanRetr:
+			t.Logf("Retr transfer has started\n")
+		case <-doneChanRetr:
+			t.Logf("Retr transfer has started\n")
+			loop = false
 		}
-		if !reflect.DeepEqual(fileContent, content) {
-			t.Errorf("Mismatched files")
-			t.Errorf("string content:\n%s\n%s", string(fileContent), string(content))
-			t.Logf("byte content:\n%v\n%v", fileContent, content)
-		}
+	}
+
+	//reading downloaded file.
+	var content []byte // just to prevent go vet
+	content, err = ioutil.ReadFile("temp_get.txt")
+	if err != nil {
+		t.Errorf("Got error: %s", err.Error())
+		return
+	}
+	if !reflect.DeepEqual(fileContent, content) {
+		t.Errorf("Mismatched files")
+		t.Errorf("string content:\n'%s'\n'%s'", string(fileContent), string(content))
+		t.Logf("byte content:\n%v\n%v", fileContent, content)
 	}
 
 	// now checking the size of the uploaded file.
@@ -239,42 +260,60 @@ func TestFileOpsPassive(t *testing.T) {
 
 	doneChanStore := make(chan struct{})
 	abortChanStore := make(chan struct{}, 1)
+	startingChanStore := make(chan struct{}, 1)
 	errChanStore := make(chan error, 1)
 
-	go ftpConn.Store("tmp.txt", FTP_MODE_PASSIVE, doneChanStore, abortChanStore, errChanStore)
+	go ftpConn.Store("tmp.txt", FTP_MODE_PASSIVE, doneChanStore, abortChanStore,
+		startingChanStore, errChanStore)
 
-	select {
-	case err = <-errChanStore:
-		t.Errorf("Got error: %s", err.Error())
-		return
-	case <-doneChanStore:
+	loop := true
+	for loop {
+		select {
+		case err = <-errChanStore:
+			t.Errorf("Got error: %s", err.Error())
+			return
+		case <-doneChanStore:
+			t.Logf("Store transfer has finished\n")
+			loop = false
+		case <-startingChanStore:
+			t.Logf("Store transfer has started\n")
+		}
 	}
 
 	doneChanRetr := make(chan struct{}, 1)
 	abortChanRetr := make(chan struct{}, 1)
+	startingChanRetr := make(chan struct{}, 1)
 	errChanRetr := make(chan error, 1)
 
-	go ftpConn.Retrieve(FTP_MODE_PASSIVE, "tmp.txt", "temp_get.txt", doneChanRetr, abortChanRetr, errChanRetr)
+	go ftpConn.Retrieve(FTP_MODE_PASSIVE, "tmp.txt", "temp_get.txt", doneChanRetr,
+		abortChanRetr, startingChanRetr, errChanRetr)
 
-	select {
-	case err = <-errChanRetr:
-		t.Errorf("Got error: %s", err.Error())
-		return
-	case <-doneChanRetr:
-
-		//reading downloaded file.
-		var content []byte // just to prevent go vet
-		content, err = ioutil.ReadFile("temp_get.txt")
-		if err != nil {
+	loop = true
+	for loop {
+		select {
+		case err = <-errChanRetr:
 			t.Errorf("Got error: %s", err.Error())
 			return
+		case <-doneChanRetr:
+
+			t.Logf("Retr transfer has finished")
+			loop = false
+		case <-startingChanRetr:
+			t.Logf("Retr transfer has started")
 		}
-		if !reflect.DeepEqual(fileContent, content) {
-			t.Errorf("Mismatched files")
-			t.Errorf("string content:\n%s\n%s", string(fileContent), string(content))
-			t.Logf("byte content:\n%v\n%v", fileContent, content)
-			return
-		}
+	}
+	//reading downloaded file.
+	var content []byte // just to prevent go vet
+	content, err = ioutil.ReadFile("temp_get.txt")
+	if err != nil {
+		t.Errorf("Got error: %s", err.Error())
+		return
+	}
+	if !reflect.DeepEqual(fileContent, content) {
+		t.Errorf("Mismatched files")
+		t.Errorf("string content:\n%s\n%s", string(fileContent), string(content))
+		t.Logf("byte content:\n%v\n%v", fileContent, content)
+		return
 	}
 
 	response, err := ftpConn.DeleteFile("tmp.txt")
@@ -516,15 +555,24 @@ func TestRename(t *testing.T) {
 
 	doneChanStore := make(chan struct{})
 	abortChanStore := make(chan struct{}, 1)
+	startingChanStore := make(chan struct{}, 1)
 	errChanStore := make(chan error, 1)
 
-	go ftpConn.Store("tmp.txt", FTP_MODE_PASSIVE, doneChanStore, abortChanStore, errChanStore)
+	go ftpConn.Store("tmp.txt", FTP_MODE_PASSIVE, doneChanStore, abortChanStore,
+		startingChanStore, errChanStore)
 
-	select {
-	case err = <-errChanStore:
-		t.Errorf("Got store error: %s", err.Error())
-		return
-	case <-doneChanStore:
+	loop := true
+	for loop {
+		select {
+		case err = <-errChanStore:
+			t.Errorf("Got store error: %s", err.Error())
+			return
+		case <-doneChanStore:
+			t.Logf("Store transfer has finished\n")
+			loop = false
+		case <-startingChanStore:
+			t.Logf("Store transfer has started\n")
+		}
 	}
 
 	responseRename, err := ftpConn.Rename("tmp.txt", "tmp_renamed.txt")
@@ -584,6 +632,7 @@ func TestStoreAbort(t *testing.T) {
 
 	doneChanStore := make(chan struct{}, 1)
 	abortChanStore := make(chan struct{}, 1)
+	startingChanStore := make(chan struct{}, 1)
 	errChanStore := make(chan error, 1)
 
 	// writing immediately to
@@ -594,7 +643,8 @@ func TestStoreAbort(t *testing.T) {
 	// the function will never really use the abort.
 	abortChanStore <- struct{}{}
 
-	go ftpConn.Store("tmp.txt", FTP_MODE_ACTIVE, doneChanStore, abortChanStore, errChanStore)
+	go ftpConn.Store("tmp.txt", FTP_MODE_ACTIVE, doneChanStore, abortChanStore,
+		startingChanStore, errChanStore)
 
 	select {
 	case err = <-errChanStore:
@@ -630,9 +680,11 @@ func TestRetrAbort(t *testing.T) {
 
 	doneChanStore := make(chan struct{}, 1)
 	abortChanStore := make(chan struct{}, 1)
+	startingChanStore := make(chan struct{}, 1)
 	errChanStore := make(chan error, 1)
 
-	go ftpConn.Store("tmp.txt", FTP_MODE_ACTIVE, doneChanStore, abortChanStore, errChanStore)
+	go ftpConn.Store("tmp.txt", FTP_MODE_ACTIVE, doneChanStore, abortChanStore,
+		startingChanStore, errChanStore)
 
 	select {
 	case err = <-errChanStore:
@@ -643,10 +695,12 @@ func TestRetrAbort(t *testing.T) {
 
 	doneChanRetr := make(chan struct{}, 1)
 	abortChanRetr := make(chan struct{}, 1)
+	startingChanRetr := make(chan struct{}, 1)
 	errChanRetr := make(chan error, 1)
 
 	abortChanRetr <- struct{}{}
-	go ftpConn.Retrieve(FTP_MODE_ACTIVE, "tmp.txt", "temp.txt", doneChanRetr, abortChanRetr, errChanRetr)
+	go ftpConn.Retrieve(FTP_MODE_ACTIVE, "tmp.txt", "temp.txt", doneChanRetr,
+		abortChanRetr, startingChanRetr, errChanRetr)
 
 	select {
 	case err = <-errChanRetr:
@@ -699,15 +753,24 @@ func TestParseTimeNoop(t *testing.T) {
 
 	doneChanStore := make(chan struct{}, 1)
 	abortChanStore := make(chan struct{}, 1)
+	startingChanStore := make(chan struct{}, 1)
 	errChanStore := make(chan error, 1)
 
-	go ftpConn.Store("tmp.txt", FTP_MODE_ACTIVE, doneChanStore, abortChanStore, errChanStore)
+	go ftpConn.Store("tmp.txt", FTP_MODE_ACTIVE, doneChanStore, abortChanStore,
+		startingChanStore, errChanStore)
 
-	select {
-	case err = <-errChanStore:
-		t.Errorf("Got store error: %s", err.Error())
-		return
-	case <-doneChanStore:
+	loop := true
+	for loop {
+		select {
+		case err = <-errChanStore:
+			t.Errorf("Got store error: %s", err.Error())
+			return
+		case <-doneChanStore:
+			t.Logf("Store transfer has finished\n")
+			loop = false
+		case <-startingChanStore:
+			t.Logf("Store transfer has started\n")
+		}
 	}
 
 	gotResponse, gotDate, err := ftpConn.LastModificationTime("tmp.txt")

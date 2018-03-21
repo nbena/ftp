@@ -203,6 +203,7 @@ func (f *Conn) Store(
 	mode Mode,
 	doneChan chan<- struct{},
 	abortChan <-chan struct{},
+	startingChan chan<- struct{},
 	errChan chan error) {
 
 	/*
@@ -291,6 +292,9 @@ func (f *Conn) Store(
 	}
 
 	buffer := make([]byte, 1024)
+
+	// command has been issued, notifying on startingChan
+	startingChan <- struct{}{}
 
 	for n < int(info.Size()) {
 
@@ -430,9 +434,12 @@ func (f *Conn) Pwd() (*Response, string, error) {
 // Retrieve download a file located at filepathSrc to filepathDest.
 // When finished, it writes into doneChan. Any error, that'll make it immediately exits,
 // is written into errChan.
-func (f *Conn) Retrieve(mode Mode, filepathSrc, filepathDest string,
+func (f *Conn) Retrieve(mode Mode,
+	filepathSrc,
+	filepathDest string,
 	doneChan chan<- struct{},
 	abortChan <-chan struct{},
+	startingChan chan<- struct{},
 	errChan chan<- error) {
 
 	var receiver io.ReadCloser
@@ -489,6 +496,9 @@ func (f *Conn) Retrieve(mode Mode, filepathSrc, filepathDest string,
 	// starting reading into receiver
 	buffer := make([]byte, 1024)
 	loop := true
+
+	// command has been issued, notify on startingChan
+	startingChan <- struct{}{}
 
 	for loop {
 
