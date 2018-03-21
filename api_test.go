@@ -19,6 +19,7 @@ import (
 	"net"
 	"os"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 )
@@ -731,7 +732,7 @@ func TestAuthTLS(t *testing.T) {
 	// we expect to fail
 	// if tested against apache ftp server.
 
-	ftpConn1, _, err := DialAndAuthenticate("localhost:2121",
+	ftpConn, _, err := DialAndAuthenticate("localhost:2121",
 		&Config{
 			Username: "anonymous",
 			Password: "c@b.i",
@@ -746,9 +747,21 @@ func TestAuthTLS(t *testing.T) {
 	)
 
 	if err != nil {
-		t.Errorf(err.Error())
-		return
+		if strings.Contains(err.Error(), "handshake failure") {
+			t.Logf("Got \"expected\" error from handshake: %s", err.Error())
+		} else {
+			t.Errorf(err.Error())
+		}
+	} else {
+		ftpConn.Quit()
 	}
-	defer ftpConn1.Quit()
+
+	// even if handshake error is expected, it's still an error
+	// so we can defer ONLY IF NO ERROR HAS HAPPENED.
+	// if err == nil {
+	//
+	// 	// and defer is not really needed.
+	// 	defer ftpConn1.Quit()
+	// }
 
 }

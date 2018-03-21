@@ -31,6 +31,16 @@ type cmd struct {
 	function ftpFunction
 }
 
+func (c *cmd) apply(ftpConn *ftp.Conn) (*ftp.Response, error) {
+	switch c.cmd {
+	case "auth-tls":
+		return ftpConn.AuthTLS(allowSSL3)
+	case "auth-ssl":
+		return ftpConn.AuthSSL()
+	}
+	return nil, nil
+}
+
 func parseZeroArg(s string) (*cmd, error) {
 	var command cmd
 	var err error
@@ -162,6 +172,7 @@ var (
 		cmd:      "auth-tls",
 		required: false,
 		n:        0,
+		// function: ftpFunction(ftp.AuthTLS()),
 	}
 	CommandAuthSSL = cmd{
 		cmd:      "auth-ssl",

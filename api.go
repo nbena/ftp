@@ -20,7 +20,6 @@ import (
 	"crypto/tls"
 	"errors"
 	"io"
-	"log"
 	"net"
 	"os"
 	"path"
@@ -639,7 +638,7 @@ func (f *Conn) AuthTLS(failback bool) (*Response, error) {
 		return nil, err
 	}
 
-	log.Printf("Response: %s", response.String())
+	// log.Printf("Response: %s", response.String())
 
 	if failback && response.Code != 234 { // tryssl
 		return f.AuthSSL()

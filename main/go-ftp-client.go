@@ -42,7 +42,6 @@ func main() {
 	parseFlags()
 
 	if showCiphers {
-		fmt.Printf("Ciphers: \n")
 		ciphers := ftp.CipherSuitesString(allowWeakHash)
 		for _, cipher := range ciphers {
 			fmt.Printf("%s\n", cipher)
@@ -65,6 +64,22 @@ func main() {
 	conn, _, err := getConn()
 	if err != nil {
 		shell.printError(err.Error(), true)
+	}
+
+	loop := true
+	for loop {
+		shell.prompt()
+		line := shell.scanLine()
+		// splitting line
+		// splitted_line := strings.Split(line, " ")
+		// if len(splitted_line) >
+		cmd, err := parse(line)
+		if err != nil {
+			shell.printError(err.Error(), false)
+			continue
+		}
+		cmd.apply(nil)
+
 	}
 
 	defer conn.Quit()
