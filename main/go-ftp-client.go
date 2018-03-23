@@ -20,13 +20,9 @@ package main
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/nbena/ftp"
-)
-
-const (
-	exitCmd1 = "quit"
-	exitCmd2 = "exit"
 )
 
 func getConn() (*ftp.Conn, *ftp.Response, error) {
@@ -82,21 +78,35 @@ func main() {
 		// splitted_line := strings.Split(line, " ")
 		// if len(splitted_line) >
 
-		if line == exitCmd1 || line == exitCmd2 {
+		if line == quit {
 			if _, err := conn.Quit(); err != nil {
 				shell.printError(err.Error(), false)
-				shell.goodbye()
-				loop = false
 			}
-		}
+			shell.goodbye()
+			loop = false
 
-		cmd, err := parse(line)
-		if err != nil {
-			shell.printError(err.Error(), false)
-			continue
+		} else if strings.HasPrefix(line, help) {
+			helpCmd := strings.Split(line, " ")
+			if len(helpCmd) == 1 {
+				for key, value := range helpMap {
+					shell.print(key + ":\t" + value)
+				}
+			} else {
+				helpMsg, ok := helpMap[helpCmd[1]]
+				if !ok {
+					shell.print(unrecognizedCmd)
+				} else {
+					shell.print(helpMsg)
+				}
+			}
+		} else {
+			cmd, err := parse(line)
+			if err != nil {
+				shell.printError(err.Error(), false)
+				continue
+			}
+			cmd.apply(nil)
 		}
-		cmd.apply(nil)
-
 	}
 
 	defer conn.Quit()

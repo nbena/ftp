@@ -24,6 +24,61 @@ import (
 	"github.com/nbena/ftp"
 )
 
+const (
+	exitCmd1 = "quit"
+	exitCmd2 = "exit"
+)
+
+var (
+	authSSL = "auth-ssl"
+	authTLS = "auth-tls"
+	quit    = "quit"
+	noop    = "noop"
+	pwd     = "pwd"
+	cd      = "cd"
+	info    = "info"
+	ls      = "ls"
+	mkdir   = "mkdir"
+	mv      = "mv"
+	put     = "put"
+	get     = "get"
+	rm      = "rm"
+	help    = "help"
+
+	authSSLHelp = "start an SSL connection"
+	authTLSHelp = "start a TLS connection"
+	quitHelp    = "exit"
+	noopHelp    = "noop, just do nothing"
+	pwdHelp     = "show corrent directory"
+	cdHelp      = "cd <directory> moving to <directory>"
+	infoHelp    = "info <file> show info of <file>, last modification time and size"
+	lsHelp      = "ls [directory] ls on [directory] or current directory"
+	mkdirHelp   = "mkdir <directory> create a directory"
+	mvHelp      = "mv <from> <to>"
+	putHelp     = "put <llocal-file> <remote-destination> upload <local-file> to server using <remote-destination>"
+	getHelp     = "get <remote-file> <local-destination> download <remote-file> to <local-destination>"
+	rmHelp      = "rm <file1>[filen][directoryn] delete remote files/directories"
+	helpHelp    = ""
+
+	unrecognizedCmd = "unrecognized command, type 'help' to view a list of available commands, or 'help <cmd>' for specific help"
+
+	helpMap = map[string]string{
+		authSSL: authSSLHelp,
+		authTLS: authTLSHelp,
+		quit:    quitHelp,
+		noop:    noopHelp,
+		pwd:     pwdHelp,
+		info:    infoHelp,
+		ls:      lsHelp,
+		mkdir:   mkdirHelp,
+		mv:      mvHelp,
+		put:     putHelp,
+		get:     getHelp,
+		rm:      rmHelp,
+		help:    helpHelp,
+	}
+)
+
 type ftpFunction func(...interface{}) (*ftp.Response, error)
 
 type cmd struct {
