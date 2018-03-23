@@ -61,11 +61,11 @@ func (s *shell) print(msg string) {
 }
 
 func (s *shell) prompt() {
-	fmt.Printf("ftp>\n")
+	fmt.Printf("ftp>")
 }
 
 func (s *shell) goodbye() {
-	fmt.Printf("goodbye")
+	fmt.Printf("goodbye\n")
 }
 
 func (s *shell) printError(msg string, exit bool) {

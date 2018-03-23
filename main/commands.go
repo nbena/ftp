@@ -93,25 +93,25 @@ func (c *cmd) apply(ftpConn *ftp.Conn, args ...interface{}) (interface{}, error)
 	switch c.cmd {
 
 	// no args
-	case "auth-tls":
+	case authTLS:
 		return ftpConn.AuthTLS(allowSSL3)
-	case "auth-ssl":
+	case authSSL:
 		return ftpConn.AuthSSL()
-	case "quit":
+	case quit:
 		return ftpConn.Quit()
-	case "noop":
+	case noop:
 		return ftpConn.Noop()
-	case "pwd":
-		_, pwd, err := ftpConn.Pwd()
+	case pwd:
+		_, workingDir, err := ftpConn.Pwd()
 		if err != nil {
 			return nil, err
 		}
-		return pwd, nil
+		return workingDir, nil
 
 		// 1 arg
-	case "cd":
+	case cd:
 		return ftpConn.Cd(c.args[0])
-	case "info":
+	case info:
 		_, size, err := ftpConn.Size(c.args[0])
 		if err != nil {
 			return nil, err
@@ -124,24 +124,29 @@ func (c *cmd) apply(ftpConn *ftp.Conn, args ...interface{}) (interface{}, error)
 			size,
 			lastModificationTime,
 		}, nil
-	case "ls":
-		doneChan := args[0].(chan<- []string)
-		errChan := args[1].(chan<- error)
-		ftpConn.LsDir(ftp.FTP_MODE_IND, c.args[0], doneChan, errChan)
+	case ls:
+		doneChan := args[0].(chan []string)
+		errChan := args[1].(chan error)
+		if len(c.args) == 0 {
+			ftpConn.Ls(ftp.FTP_MODE_ACTIVE, doneChan, errChan)
+		} else {
+			ftpConn.LsDir(ftp.FTP_MODE_ACTIVE, c.args[0], doneChan, errChan)
+		}
+
 		// nil, nil because returns value are in the channels.
 		// return nil, nil
-	case "mkdir":
+	case mkdir:
 		return ftpConn.MkDir(c.args[0])
 
 		// 2 arg
-	case "mv":
+	case mv:
 		return ftpConn.Rename(c.args[0], c.args[1])
 
-	case "put":
-		doneChan := args[0].(chan<- struct{})
-		errChan := args[1].(chan<- error)
-		abortChan := args[2].(<-chan struct{})
-		startingChan := args[3].(chan<- struct{})
+	case put:
+		doneChan := args[0].(chan struct{})
+		errChan := args[1].(chan error)
+		abortChan := args[2].(chan struct{})
+		startingChan := args[3].(chan struct{})
 		ftpConn.Store(ftp.FTP_MODE_IND,
 			c.args[0],
 			c.args[1],
@@ -153,11 +158,11 @@ func (c *cmd) apply(ftpConn *ftp.Conn, args ...interface{}) (interface{}, error)
 			deleteIfAbort)
 		// return nil, nil
 
-	case "get":
-		doneChan := args[0].(chan<- struct{})
-		errChan := args[1].(chan<- error)
-		abortChan := args[2].(<-chan struct{})
-		startingChan := args[3].(chan<- struct{})
+	case get:
+		doneChan := args[0].(chan struct{})
+		errChan := args[1].(chan error)
+		abortChan := args[2].(chan struct{})
+		startingChan := args[3].(chan struct{})
 		ftpConn.Retrieve(ftp.FTP_MODE_IND,
 			c.args[0],
 			c.args[1],
@@ -167,7 +172,7 @@ func (c *cmd) apply(ftpConn *ftp.Conn, args ...interface{}) (interface{}, error)
 			// delete if abort is not present because it's always done.
 			errChan)
 		// n
-	case "rm":
+	case rm:
 		var responses []*ftp.Response
 		for _, filename := range c.args {
 			// we can't know if it's a file or not,
@@ -200,16 +205,18 @@ func parseZeroArg(s string) (*cmd, error) {
 	var command cmd
 	var err error
 	switch s {
-	case "auth-tls":
-		command = CommandAuthTLS
-	case "auth-ssl":
-		command = CommandAuthSSL
-	case "quit":
-		command = CommandQuit
-	case "noop":
-		command = CommandNoop
-	case "pwd":
-		command = CommandPwd
+	case authTLS:
+		command = commandAuthTLS
+	case authSSL:
+		command = commandAuthSSL
+	case quit:
+		command = commandQuit
+	case noop:
+		command = commandNoop
+	case pwd:
+		command = commandPwd
+	case ls:
+		command = commandLs
 	default:
 		err = fmt.Errorf("Unknown command: %s", s)
 	}
@@ -220,14 +227,14 @@ func parseOneArg(first, second string) (*cmd, error) {
 	var command cmd
 	var err error
 	switch first {
-	case "cd":
-		command = CommandCd
-	case "info":
-		command = CommandFileInfo
-	case "ls":
-		command = CommandLs
-	case "mkdir":
-		command = CommandMkdir
+	case cd:
+		command = commandCd
+	case info:
+		command = commandFileInfo
+	case mkdir:
+		command = commandMkdir
+	case ls:
+		command = commandLs
 	default:
 		err = fmt.Errorf("Unknown command: %s", first)
 	}
@@ -241,12 +248,12 @@ func parseTwoArg(first, second, third string) (*cmd, error) {
 	var command cmd
 	var err error
 	switch first {
-	case "mv":
-		command = CommandRename
+	case mv:
+		command = commandRename
 	default:
 		err = fmt.Errorf("Unknown command: %s", first)
 	}
-	if err != nil {
+	if err == nil {
 		command.args = []string{second, third}
 	}
 	return &command, err
@@ -256,16 +263,22 @@ func parseNArg(first string, others []string) (*cmd, error) {
 	var command cmd
 	var err error
 	switch first {
-	case "rm":
-		command = CommandRm
-	case "get":
-		command = CommandGet
-	case "put":
-		command = CommandPut
+	case rm:
+		command = commandRm
+	case get:
+		command = commandGet
+		if len(others) != 2 {
+			err = fmt.Errorf("Wrong args length for 'get': %d, help: %s", len(others), helpMap[get])
+		}
+	case put:
+		command = commandPut
+		if len(others) != 2 {
+			err = fmt.Errorf("Wrong args length for 'put': %d, help: %s", len(others), helpMap[put])
+		}
 	default:
 		err = fmt.Errorf("Unknown command: %s", first)
 	}
-	if err != nil {
+	if err == nil {
 		command.args = others
 	}
 	return &command, err
@@ -323,79 +336,79 @@ func parseAllCommands(s string) ([]*cmd, error) {
 }
 
 var (
-	CommandAuthTLS = cmd{
+	commandAuthTLS = cmd{
 		cmd:      "auth-tls",
 		required: false,
 		n:        0,
 		// function: ftpFunction(ftp.AuthTLS()),
 	}
-	CommandAuthSSL = cmd{
+	commandAuthSSL = cmd{
 		cmd:      "auth-ssl",
 		required: false,
 		n:        0,
 	}
-	CommandAbort = cmd{
+	commandAbort = cmd{
 		cmd:      "abort",
 		required: false,
 		n:        1,
 	}
-	CommandCd = cmd{
+	commandCd = cmd{
 		cmd:      "cmd",
 		required: true,
 		n:        1,
 	}
-	CommandRm = cmd{
+	commandRm = cmd{
 		cmd:      "rm",
 		required: true,
 		n:        -1,
 	}
-	CommandLastMod = cmd{
+	commandLastMod = cmd{
 		cmd:      "last-mod",
 		required: true,
 		n:        1,
 	}
-	// CommandFileInfo issues size and mdtm.
-	CommandFileInfo = cmd{
+	// commandFileInfo issues size and mdtm.
+	commandFileInfo = cmd{
 		cmd:      "info",
 		required: true,
 		n:        1,
 	}
-	CommandLs = cmd{
+	commandLs = cmd{
 		cmd:      "ls",
 		required: true,
 		n:        1,
 	}
-	CommandMkdir = cmd{
+	commandMkdir = cmd{
 		cmd:      "mkdir",
 		required: true,
 		n:        1,
 	}
-	CommandNoop = cmd{
+	commandNoop = cmd{
 		cmd:      "noop",
 		required: false,
 		n:        0,
 	}
-	CommandPwd = cmd{
+	commandPwd = cmd{
 		cmd:      "pwd",
 		required: false,
 		n:        0,
 	}
-	CommandQuit = cmd{
+	commandQuit = cmd{
 		cmd:      "quit",
 		required: false,
 		n:        0,
 	}
-	CommandRename = cmd{
+	commandRename = cmd{
 		cmd:      "mv",
 		required: true,
 		n:        2,
 	}
-	CommandGet = cmd{
+	commandGet = cmd{
 		cmd:      "get",
 		required: true,
 		n:        -1,
 	}
-	CommandPut = cmd{
+	commandPut = cmd{
 		cmd:      "put",
 		required: true,
 		n:        -1,
@@ -406,18 +419,18 @@ var (
 
 func init() {
 	commandsTable = make(map[string]cmd)
-	commandsTable[CommandAuthTLS.cmd] = CommandAuthTLS
-	commandsTable[CommandAuthSSL.cmd] = CommandAuthSSL
-	commandsTable[CommandAbort.cmd] = CommandAbort
-	commandsTable[CommandCd.cmd] = CommandCd
-	commandsTable[CommandRm.cmd] = CommandRm
-	commandsTable[CommandFileInfo.cmd] = CommandFileInfo
-	commandsTable[CommandLs.cmd] = CommandLs
-	commandsTable[CommandGet.cmd] = CommandGet
-	commandsTable[CommandPut.cmd] = CommandPut
-	commandsTable[CommandPwd.cmd] = CommandPwd
-	commandsTable[CommandQuit.cmd] = CommandQuit
-	commandsTable[CommandMkdir.cmd] = CommandMkdir
-	commandsTable[CommandNoop.cmd] = CommandNoop
-	commandsTable[CommandRename.cmd] = CommandRename
+	commandsTable[commandAuthTLS.cmd] = commandAuthTLS
+	commandsTable[commandAuthSSL.cmd] = commandAuthSSL
+	commandsTable[commandAbort.cmd] = commandAbort
+	commandsTable[commandCd.cmd] = commandCd
+	commandsTable[commandRm.cmd] = commandRm
+	commandsTable[commandFileInfo.cmd] = commandFileInfo
+	commandsTable[commandLs.cmd] = commandLs
+	commandsTable[commandGet.cmd] = commandGet
+	commandsTable[commandPut.cmd] = commandPut
+	commandsTable[commandPwd.cmd] = commandPwd
+	commandsTable[commandQuit.cmd] = commandQuit
+	commandsTable[commandMkdir.cmd] = commandMkdir
+	commandsTable[commandNoop.cmd] = commandNoop
+	commandsTable[commandRename.cmd] = commandRename
 }

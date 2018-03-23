@@ -45,6 +45,7 @@ var (
 	commands        string
 	parsedCommands  []*cmd
 	deleteIfAbort   bool
+	// anonymous       bool
 )
 
 func parseFlags() {
@@ -61,6 +62,7 @@ func parseFlags() {
 	flag.BoolVar(&skipVerify, "tls-skip-verify", false, "skip or not the server cert verification")
 	flag.BoolVar(&showCiphers, "tls-show-ciphers", false, "show available TLS ciphers")
 	flag.StringVar(&commands, "commands", "", "list of semicolon-separated commands to be executed")
+	// flag.StringVar(&anonymous, "anonymous-ftp", true, "use anonym")
 
 	flag.Parse()
 

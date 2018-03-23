@@ -38,6 +38,8 @@ func getConn() (*ftp.Conn, *ftp.Response, error) {
 			DefaultMode: ftp.FTP_MODE_IND,
 			LocalIP:     localIPParsed,
 			LocalPort:   localPortParsed,
+			Username:    username,
+			Password:    password,
 		})
 }
 
@@ -55,7 +57,7 @@ func main() {
 
 	if len(parsedCommands) > 0 {
 		for _, v := range parsedCommands {
-			if v.cmd == CommandQuit.cmd {
+			if v.cmd == commandQuit.cmd {
 				// execute and exit.
 
 			}
@@ -63,14 +65,22 @@ func main() {
 	}
 
 	shell := newshell()
-	shell.askCredential()
-
+	if username == "" || password == "" {
+		username, password = shell.askCredential()
+	}
 	conn, _, err := getConn()
 	if err != nil {
 		shell.printError(err.Error(), true)
 	}
 
 	loop := true
+
+	doneChanStr := make(chan []string, 10)
+	doneChanStruct := make(chan struct{}, 10)
+	errChan := make(chan error, 10)
+	abortChan := make(chan struct{}, 10)
+	startingChan := make(chan struct{}, 10)
+
 	for loop {
 		shell.prompt()
 		line := shell.scanLine()
@@ -105,7 +115,30 @@ func main() {
 				shell.printError(err.Error(), false)
 				continue
 			}
-			cmd.apply(nil)
+			// doneChan := doneChanStruct
+			var doneChan interface{}
+			if cmd.cmd == ls {
+				doneChan = doneChanStr
+			} else {
+				doneChan = doneChanStruct
+			}
+			response, err := cmd.apply(conn, doneChan, errChan, abortChan, startingChan)
+			// _, err = cmd.apply(conn, doneChan, errChan, abortChan, startingChan)
+			if err != nil {
+				shell.printError(err.Error(), false)
+			}
+			if cmd.cmd == ls {
+				dirs := <-doneChanStr
+				for _, dir := range dirs {
+					shell.print(dir)
+				}
+			}
+			if response != nil {
+				switch response.(type) {
+				case string:
+					shell.print(response.(string))
+				}
+			}
 		}
 	}
 
