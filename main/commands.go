@@ -74,13 +74,44 @@ func (c *cmd) apply(ftpConn *ftp.Conn, args ...interface{}) (interface{}, error)
 		errChan := args[1].(chan<- error)
 		ftpConn.LsDir(ftp.FTP_MODE_IND, c.args[0], doneChan, errChan)
 		// nil, nil because returns value are in the channels.
-		return nil, nil
+		// return nil, nil
 	case "mkdir":
 		return ftpConn.MkDir(c.args[0])
 
 		// 2 arg
 	case "mv":
 		return ftpConn.Rename(c.args[0], c.args[1])
+
+	case "put":
+		doneChan := args[0].(chan<- struct{})
+		errChan := args[1].(chan<- error)
+		abortChan := args[2].(<-chan struct{})
+		startingChan := args[3].(chan<- struct{})
+		ftpConn.Store(ftp.FTP_MODE_IND,
+			c.args[0],
+			c.args[1],
+			doneChan,
+			abortChan,
+			startingChan,
+			errChan,
+			// deleteIfAbort is a global variable.
+			deleteIfAbort)
+		// return nil, nil
+
+	case "get":
+		doneChan := args[0].(chan<- struct{})
+		errChan := args[1].(chan<- error)
+		abortChan := args[2].(<-chan struct{})
+		startingChan := args[3].(chan<- struct{})
+		ftpConn.Retrieve(ftp.FTP_MODE_IND,
+			c.args[0],
+			c.args[1],
+			doneChan,
+			abortChan,
+			startingChan,
+			// delete if abort is not present because it's always done.
+			errChan)
+		// n
 	case "rm":
 		var responses []*ftp.Response
 		for _, filename := range c.args {

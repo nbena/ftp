@@ -64,6 +64,10 @@ func (s *shell) prompt() {
 	fmt.Printf("ftp>\n")
 }
 
+func (s *shell) goodbye() {
+	fmt.Printf("goodbye")
+}
+
 func (s *shell) printError(msg string, exit bool) {
 	fmt.Fprintf(os.Stderr, "%s\n", msg)
 	if exit {

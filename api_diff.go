@@ -44,7 +44,7 @@ func (f *Conn) Store(
 	doneChan chan<- struct{},
 	abortChan <-chan struct{},
 	startingChan chan<- struct{},
-	errChan chan error,
+	errChan chan<- error,
 	deleteIfAbort bool,
 ) {
 

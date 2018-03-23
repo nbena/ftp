@@ -24,6 +24,11 @@ import (
 	"github.com/nbena/ftp"
 )
 
+const (
+	exitCmd1 = "quit"
+	exitCmd2 = "exit"
+)
+
 func getConn() (*ftp.Conn, *ftp.Response, error) {
 	return ftp.DialAndAuthenticate(remote,
 		&ftp.Config{
@@ -76,6 +81,15 @@ func main() {
 		// splitting line
 		// splitted_line := strings.Split(line, " ")
 		// if len(splitted_line) >
+
+		if line == exitCmd1 || line == exitCmd2 {
+			if _, err := conn.Quit(); err != nil {
+				shell.printError(err.Error(), false)
+				shell.goodbye()
+				loop = false
+			}
+		}
+
 		cmd, err := parse(line)
 		if err != nil {
 			shell.printError(err.Error(), false)

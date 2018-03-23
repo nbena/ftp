@@ -44,6 +44,7 @@ var (
 	showCiphers     bool
 	commands        string
 	parsedCommands  []*cmd
+	deleteIfAbort   bool
 )
 
 func parseFlags() {
