@@ -60,8 +60,8 @@ func (s *shell) print(msg string) {
 	fmt.Printf("%s\n", msg)
 }
 
-func (s *shell) prompt() {
-	fmt.Printf("ftp>")
+func (s *shell) prompt(location string) {
+	fmt.Printf("ftp:%s>", location)
 }
 
 func (s *shell) goodbye() {

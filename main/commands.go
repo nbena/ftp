@@ -353,7 +353,7 @@ var (
 		n:        1,
 	}
 	commandCd = cmd{
-		cmd:      "cmd",
+		cmd:      "cd",
 		required: true,
 		n:        1,
 	}

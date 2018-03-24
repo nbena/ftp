@@ -26,6 +26,9 @@ import (
 )
 
 func getConn() (*ftp.Conn, *ftp.Response, error) {
+	// USER MUST HAVE TO SPECIFY SKIP VERIFY EVEN
+	// IF HE DOESN'T WANT TO CONNECT USING TLS,
+	// BECAUSE IT MAY WANT TO USE IT LATER.
 	return ftp.DialAndAuthenticate(remote,
 		&ftp.Config{
 			TLSOption: &ftp.TLSOption{
@@ -68,7 +71,7 @@ func main() {
 	if username == "" || password == "" {
 		username, password = shell.askCredential()
 	}
-	conn, _, err := getConn()
+	conn, response, err := getConn()
 	if err != nil {
 		shell.printError(err.Error(), true)
 	}
@@ -81,8 +84,17 @@ func main() {
 	abortChan := make(chan struct{}, 10)
 	startingChan := make(chan struct{}, 10)
 
+	fmt.Printf("Server tells: %s\n", response.String())
+
+	var location string
+	if alwaysPwd {
+		location = localIPParsed.String() + "/"
+	} else {
+		location = localIPParsed.String()
+	}
+
 	for loop {
-		shell.prompt()
+		shell.prompt(location)
 		line := shell.scanLine()
 		// splitting line
 		// splitted_line := strings.Split(line, " ")
@@ -139,6 +151,17 @@ func main() {
 					shell.print(response.(string))
 				}
 			}
+
+			if cmd.cmd == "cd" && alwaysPwd {
+				currentDir, err := commandPwd.apply(conn)
+				if err != nil {
+					// do nothing, it's a command that hasn't been required by the user.
+				} else {
+					currentDir := currentDir.(string)
+					location = localIPParsed.String() + currentDir
+				}
+			}
+
 		}
 	}
 
