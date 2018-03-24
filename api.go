@@ -40,7 +40,7 @@ const (
 	// will be used.
 	FTP_MODE_PASSIVE = Mode(2)
 
-	// This needs to be implemented.
+	// TODO implements this.
 	FTP_MODE_IND = Mode(0)
 
 	// AlreadyTLS is the error (error with this content)
@@ -64,6 +64,10 @@ const (
 	// DeleteDirOk is the expected return code when a file has been removed.
 	DeleteDirOk = 250
 
+	// FileUnavailable is the return code when a file doesn't exists/is busy
+	// or something similar.
+	FileUnavailable = 450
+
 	// FirstConnOk is what server writes when a connection occured.
 	FirstConnOk = 220
 
@@ -80,6 +84,10 @@ const (
 
 	// NoopOk is the expected return code for a NOOP command.
 	NoopOk = 200
+
+	// NotSupported is the return code when the server doesn't support
+	// the feature/command/requested.
+	NotSupported = 431
 
 	// PasvOk is the expected return code for a PASV command.
 	PasvOk = 227

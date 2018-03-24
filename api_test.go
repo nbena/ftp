@@ -409,7 +409,7 @@ func TestDirOpsActive(t *testing.T) {
 			t.Errorf(err.Error())
 			return
 		}
-		if !response.IsFileNotExists() {
+		if response.Code != FileUnavailable {
 			t.Errorf("Got error: %s", err.Error())
 			return
 		}
@@ -510,7 +510,7 @@ func TestDirOpsPassive(t *testing.T) {
 			t.Errorf(err.Error())
 			return
 		}
-		if !response.IsFileNotExists() {
+		if response.Code != FileUnavailable {
 			t.Errorf("Got error: %s", err.Error())
 			return
 		}

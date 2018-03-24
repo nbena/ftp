@@ -33,37 +33,38 @@ import (
 // 	return r.Code == 426
 // }
 
-func (r *Response) IsSuccesfullyCompleted() bool {
-	return r.Code == 226
-}
-
-func (r *Response) IsNotImplemented() bool {
-	return r.Code == 502
-}
-
-// IsFailToAccomplish checks if response.Code == 550.
-// 550 is an error used when the server can parse our
-// request but can't serve it. For example when we request a
-// size for a set transfer mode which the file can't be sent over.
-// Another example is where modification time is not available.
-func (r *Response) IsFailToAccomplish() bool {
-	return r.Code == 550
-}
-
-func (r *Response) IsNotSupported() bool {
-	return r.Code == 431
-}
-
+// func (r *Response) IsSuccesfullyCompleted() bool {
+// 	return r.Code == 226
+// }
+//
+// func (r *Response) IsNotImplemented() bool {
+// 	return r.Code == 502
+// }
+//
+// // IsFailToAccomplish checks if response.Code == 550.
+// // 550 is an error used when the server can parse our
+// // request but can't serve it. For example when we request a
+// // size for a set transfer mode which the file can't be sent over.
+// // Another example is where modification time is not available.
+// func (r *Response) IsFailToAccomplish() bool {
+// 	return r.Code == 550
+// }
+//
+// func (r *Response) IsNotSupported() bool {
+// 	return r.Code == 431
+// }
+//
 // IsFtpError returns true if the response represents
 // an error. That means that the code is >=500 && < 600.
 func (r *Response) IsFtpError() bool {
 	return r.Code >= 500 && r.Code < 600
 }
 
-// IsFileNotExists check if the code is 450.
-func (r *Response) IsFileNotExists() bool {
-	return r.Code == 450
-}
+//
+// // IsFileNotExists check if the code is 450.
+// func (r *Response) IsFileNotExists() bool {
+// 	return r.Code == 450
+// }
 
 func (r *Response) getTime() (*time.Time, error) {
 	var year, month, day, hour, min, sec, nsec int
@@ -391,7 +392,7 @@ func internalDial(remote string, config *Config) (*Conn, *Response, error) {
 			return nil, nil, err
 		}
 
-		if tlsResponse.IsNotSupported() {
+		if tlsResponse.Code == NotSupported {
 			if config.TLSOption.ContinueIfNoSSL {
 				err = errors.New(FailToTLS)
 			} else {
@@ -486,7 +487,7 @@ func (f *Conn) internalLs(mode Mode, filepath string, doneChan chan<- []string, 
 			return
 		}
 
-		if response.IsFileNotExists() {
+		if response.Code == FileUnavailable {
 			errChan <- errors.New(response.String())
 			return
 		}
