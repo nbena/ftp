@@ -24,6 +24,8 @@ import (
 	"os"
 	"strconv"
 	"strings"
+
+	"github.com/nbena/ftp"
 )
 
 var (
@@ -46,12 +48,14 @@ var (
 	parsedCommands  []*cmd
 	deleteIfAbort   bool
 	alwaysPwd       bool
+
+	ftpDefaultMode ftp.Mode
 )
 
 func parseFlags() {
 	flag.StringVar(&localIP, "local-address", "localhost:5354", "the address:port which the client binds in")
 	flag.StringVar(&remote, "remote", "localhost:2121", "name:port of ftp server")
-	flag.StringVar(&defaultMode, "connection-mode", "active", "the ftp mode, allowed: passive|active|default")
+	flag.StringVar(&defaultMode, "connection-mode", "passive", "the ftp mode, allowed: passive|active|default")
 	flag.StringVar(&username, "username", "anonymous", "the username")
 	flag.StringVar(&password, "password", "c@b.com", "the password")
 	flag.BoolVar(&implicitTLS, "tls-implicit", false, "use implicit TLS")
@@ -73,6 +77,15 @@ func parseFlags() {
 	if defaultMode != "passive" && defaultMode != "active" && defaultMode != "default" {
 		fmt.Fprintf(os.Stderr, "Unknow option for \"connection-mode\": %s", defaultMode)
 		os.Exit(1)
+	}
+
+	ftpDefaultMode, err = ftp.GetMode(defaultMode)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, err.Error())
+		os.Exit(1)
+	}
+	if ftpDefaultMode == ftp.IndMode {
+		ftpDefaultMode = ftp.PassiveMode
 	}
 
 	if commands != "" {

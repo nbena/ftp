@@ -20,6 +20,7 @@ package ftp
 import (
 	"bufio"
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"net"
 	"strconv"
@@ -33,15 +34,16 @@ import (
 type Mode int
 
 const (
-	// FTP_MODE_ACTIVE means that for default the
+	// ActiveMode means that for default the
 	// active modality will be used.
-	FTP_MODE_ACTIVE = Mode(1)
-	// FTP_MODE_PASSIVE means that the passive mode
-	// will be used.
-	FTP_MODE_PASSIVE = Mode(2)
+	ActiveMode = Mode(1)
 
-	// TODO implements this.
-	FTP_MODE_IND = Mode(0)
+	// PassiveMode means that the passive mode
+	// will be used.
+	PassiveMode = Mode(2)
+
+	// IndMode implements this.
+	IndMode = Mode(0)
 
 	// AlreadyTLS is the error (error with this content)
 	// that is reported everytime an auth tls/ssl is issued
@@ -111,6 +113,19 @@ const (
 
 	// UsernameOk is the expected return code for a USER command.
 	UsernameOk = 331
+
+	// InvalidMode is the error msg returned when default Mode is passed
+	// and it is not allowed.
+	InvalidMode = "Invalid Mode, only ActiveMode and ModePassive are allowed"
+
+	// ActiveModeStr is the FTP mode active.
+	ActiveModeStr = "active"
+
+	// PassiveModeStr is the FTP mode passive.
+	PassiveModeStr = "passive"
+
+	// DefaultModeStr is a 'no-matters' FTP mode.
+	DefaultModeStr = "default"
 )
 
 // UnexpectedCodeError is the type that repesents an error that
@@ -204,8 +219,59 @@ type Conn struct {
 	config       *Config
 	lastUsedPort int
 	portLock     sync.Mutex
-	lastUsedMod  Mode
 	// rand   *rand.Rand
+}
+
+// SetDefaultMode sets the FTP mode to be used for the next requests.
+// This is used only when functions that takes a Mode type param have that
+// param set to 'ModeInd'. If so, this provided mode will be used. If no,
+// the mode provided in that function will be used.
+func (f *Conn) SetDefaultMode(mode Mode) error {
+	if mode == IndMode {
+		return errors.New(InvalidMode)
+	}
+	f.config.DefaultMode = mode
+	return nil
+}
+
+// GetMode returns the FTP mode from the mode param.
+func GetMode(mode string) (Mode, error) {
+	var ftpMode Mode
+	if mode == ActiveModeStr {
+		ftpMode = ActiveMode
+	} else if mode == PassiveModeStr {
+		ftpMode = PassiveMode
+	} else if mode == DefaultModeStr {
+		ftpMode = IndMode
+	} else {
+		return -1, errors.New(InvalidMode)
+	}
+	return ftpMode, nil
+}
+
+// Mode returns the current default modality.
+func (f *Conn) Mode() string {
+	// var mode string
+	// if f.config.DefaultMode == ActiveMode {
+	// 	mode = "active"
+	// } else if f.config.DefaultMode == ActiveMode {
+	// 	mode = "passive"
+	// } else {
+	// 	mode = "default"
+	// }
+	return modeStr(f.config.DefaultMode)
+}
+
+func modeStr(mode Mode) string {
+	var modeStr string
+	if mode == ActiveMode {
+		modeStr = "active"
+	} else if mode == PassiveMode {
+		modeStr = "passive"
+	} else {
+		modeStr = "default"
+	}
+	return modeStr
 }
 
 // Response is the response from the server.

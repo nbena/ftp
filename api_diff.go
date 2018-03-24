@@ -78,7 +78,11 @@ func (f *Conn) Store(
 
 	// _, fileName := path.Split(src)
 
-	if mode == FTP_MODE_ACTIVE {
+	if mode == IndMode {
+		mode = f.config.DefaultMode
+	}
+
+	if mode == ActiveMode {
 
 		listener, err := f.openListener()
 		if err != nil {
@@ -98,7 +102,7 @@ func (f *Conn) Store(
 			return
 		}
 
-	} else if mode == FTP_MODE_PASSIVE {
+	} else if mode == PassiveMode {
 
 		addr, err := f.pasvGetAddr()
 		if err != nil {
@@ -230,7 +234,11 @@ func (f *Conn) Retrieve(mode Mode,
 
 	var receiver io.ReadCloser
 
-	if mode == FTP_MODE_ACTIVE {
+	if mode == IndMode {
+		mode = f.config.DefaultMode
+	}
+
+	if mode == ActiveMode {
 
 		//opening a listener.
 		listener, err := f.openListener()
@@ -252,7 +260,7 @@ func (f *Conn) Retrieve(mode Mode,
 			errChan <- err
 			return
 		}
-	} else if mode == FTP_MODE_PASSIVE {
+	} else if mode == PassiveMode {
 
 		addr, err := f.pasvGetAddr()
 		if err != nil {

@@ -43,6 +43,8 @@ var (
 	put     = "put"
 	get     = "get"
 	rm      = "rm"
+	setMode = "set-mode"
+	getMode = "get-mode"
 	help    = "help"
 
 	authSSLHelp = "start an SSL connection"
@@ -58,6 +60,8 @@ var (
 	putHelp     = "put <llocal-file> <remote-destination> upload <local-file> to server using <remote-destination>"
 	getHelp     = "get <remote-file> <local-destination> download <remote-file> to <local-destination>"
 	rmHelp      = "rm <file1>[filen][directoryn] delete remote files/directories"
+	setModeHelp = "set-mode active|passive sets the mode to use for the next transfers"
+	getModeHelp = "get-mode shows the current use FTP mode"
 	helpHelp    = ""
 
 	unrecognizedCmd = "unrecognized command, type 'help' to view a list of available commands, or 'help <cmd>' for specific help"
@@ -76,6 +80,8 @@ var (
 		get:     getHelp,
 		rm:      rmHelp,
 		help:    helpHelp,
+		setMode: setModeHelp,
+		getMode: getModeHelp,
 	}
 )
 
@@ -108,7 +114,18 @@ func (c *cmd) apply(ftpConn *ftp.Conn, args ...interface{}) (interface{}, error)
 		}
 		return workingDir, nil
 
+	case getMode:
+		mode := ftpConn.Mode()
+		return mode, nil
+
 		// 1 arg
+	case setMode:
+		mode, err := ftp.GetMode(c.args[0])
+		if err != nil {
+			return nil, err
+		}
+		ftpConn.SetDefaultMode(mode)
+		return nil, nil
 	case cd:
 		return ftpConn.Cd(c.args[0])
 	case info:
@@ -128,9 +145,9 @@ func (c *cmd) apply(ftpConn *ftp.Conn, args ...interface{}) (interface{}, error)
 		doneChan := args[0].(chan []string)
 		errChan := args[1].(chan error)
 		if len(c.args) == 0 {
-			ftpConn.Ls(ftp.FTP_MODE_ACTIVE, doneChan, errChan)
+			ftpConn.Ls(ftp.IndMode, doneChan, errChan)
 		} else {
-			ftpConn.LsDir(ftp.FTP_MODE_ACTIVE, c.args[0], doneChan, errChan)
+			ftpConn.LsDir(ftp.IndMode, c.args[0], doneChan, errChan)
 		}
 
 		// nil, nil because returns value are in the channels.
@@ -147,7 +164,7 @@ func (c *cmd) apply(ftpConn *ftp.Conn, args ...interface{}) (interface{}, error)
 		errChan := args[1].(chan error)
 		abortChan := args[2].(chan struct{})
 		startingChan := args[3].(chan struct{})
-		ftpConn.Store(ftp.FTP_MODE_IND,
+		ftpConn.Store(ftp.IndMode,
 			c.args[0],
 			c.args[1],
 			doneChan,
@@ -163,7 +180,7 @@ func (c *cmd) apply(ftpConn *ftp.Conn, args ...interface{}) (interface{}, error)
 		errChan := args[1].(chan error)
 		abortChan := args[2].(chan struct{})
 		startingChan := args[3].(chan struct{})
-		ftpConn.Retrieve(ftp.FTP_MODE_IND,
+		ftpConn.Retrieve(ftp.IndMode,
 			c.args[0],
 			c.args[1],
 			doneChan,
@@ -217,6 +234,8 @@ func parseZeroArg(s string) (*cmd, error) {
 		command = commandPwd
 	case ls:
 		command = commandLs
+	case getMode:
+		command = commandGetMode
 	default:
 		err = fmt.Errorf("Unknown command: %s", s)
 	}
@@ -235,6 +254,8 @@ func parseOneArg(first, second string) (*cmd, error) {
 		command = commandMkdir
 	case ls:
 		command = commandLs
+	case setMode:
+		command = commandSetMode
 	default:
 		err = fmt.Errorf("Unknown command: %s", first)
 	}
@@ -412,6 +433,16 @@ var (
 		cmd:      "put",
 		required: true,
 		n:        -1,
+	}
+	commandSetMode = cmd{
+		cmd:      "set-mode",
+		required: true,
+		n:        1,
+	}
+	commandGetMode = cmd{
+		cmd:      "get-mode",
+		required: false,
+		n:        0,
 	}
 
 	commandsTable map[string]cmd

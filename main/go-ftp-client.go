@@ -38,7 +38,7 @@ func getConn() (*ftp.Conn, *ftp.Response, error) {
 				ContinueIfNoSSL: continueIfNoTLS,
 				ImplicitTLS:     implicitTLS,
 			},
-			DefaultMode: ftp.FTP_MODE_IND,
+			DefaultMode: ftpDefaultMode,
 			LocalIP:     localIPParsed,
 			LocalPort:   localPortParsed,
 			Username:    username,
@@ -111,7 +111,7 @@ func main() {
 			helpCmd := strings.Split(line, " ")
 			if len(helpCmd) == 1 {
 				for key, value := range helpMap {
-					shell.print(key + ":\t" + value)
+					shell.print(key + ":\t\t" + value)
 				}
 			} else {
 				helpMsg, ok := helpMap[helpCmd[1]]

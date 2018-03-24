@@ -54,6 +54,7 @@ import (
 // 	return r.Code == 431
 // }
 //
+
 // IsFtpError returns true if the response represents
 // an error. That means that the code is >=500 && < 600.
 func (r *Response) IsFtpError() bool {
@@ -318,6 +319,10 @@ func internalDial(remote string, config *Config) (*Conn, *Response, error) {
 		},
 	}
 
+	if config.DefaultMode == IndMode {
+		return nil, nil, errors.New(InvalidMode)
+	}
+
 	config.initTLS()
 
 	if config.TLSOption.ImplicitTLS {
@@ -333,12 +338,6 @@ func internalDial(remote string, config *Config) (*Conn, *Response, error) {
 	ftpConn := &Conn{
 		control: conn,
 		config:  config,
-		// listenersParams: lane.NewQueue(),
-		// listeners:       lane.NewQueue(),
-		// data:            lane.NewQueue(),
-		lastUsedMod: FTP_MODE_IND,
-		// controlReader: bufio.NewReader(conn),
-		// rand:            rand.New(rand.NewSource(time.Now().UnixNano())),
 	}
 	reader, writer := bufio.NewReader(conn), bufio.NewWriter(conn)
 	ftpConn.controlRw = bufio.NewReadWriter(reader, writer)
@@ -351,39 +350,6 @@ func internalDial(remote string, config *Config) (*Conn, *Response, error) {
 		return nil, nil, newUnexpectedCodeError(FirstConnOk, response.Code)
 	}
 
-	// if tlsonfirst we try a TLS.
-	// if config.AuthTLSOnFirst && config.TLSConfig.MinVersion == tls.VersionSSL30 && config.AllowSSL {
-	// 	sslResponse, err := ftpConn.AuthSSL()
-	// 	if err != nil {
-	// 		return nil, nil, err
-	// 	}
-	// 	if sslResponse.IsNotSupported() {
-	// 		return nil, nil, errors.New(sslResponse.Error())
-	// 	}
-	// } else if config.AuthTLSOnFirst {
-	// 	// // try tls
-	// 	// tlsResponse, err := ftpConn.AuthTLS()
-	// 	// if err != nil {
-	// 	// 	return nil, nil, err
-	// 	// }
-	// 	// if tlsResponse.IsNotSupported() {
-	// 	// 	// try ssl
-	// 	// 	sslResponse, err := ftpConn.AuthSSL()
-	// 	// 	if err != nil {
-	// 	// 		return nil, nil, err
-	// 	// 	}
-	// 	// 	if sslResponse.IsNotSupported() {
-	// 	// 		return nil, nil, errors.New(sslResponse.Error())
-	// 	// 	}
-	// 	// }
-	// 	tlsResponse, err := ftpConn.AuthTLS(true)
-	// 	if err != nil {
-	// 		return nil, nil, err
-	// 	}
-	// 	if tlsResponse.IsNotSupported() {
-	// 		return nil, nil, errors.New(tlsResponse.Error())
-	// 	}
-	// }
 	// always try tls.
 	var tlsResponse *Response
 	if config.TLSOption.AuthTLSOnFirst {
@@ -463,7 +429,11 @@ func (f *Conn) internalLs(mode Mode, filepath string, doneChan chan<- []string, 
 		cmd = "LIST " + filepath + "\r\n"
 	}
 
-	if mode == FTP_MODE_ACTIVE {
+	if mode == IndMode {
+		mode = f.config.DefaultMode
+	}
+
+	if mode == ActiveMode {
 
 		// create the listener.
 		listener, err := f.openListener()
@@ -499,13 +469,13 @@ func (f *Conn) internalLs(mode Mode, filepath string, doneChan chan<- []string, 
 			return
 		}
 
-	} else if mode == FTP_MODE_PASSIVE {
+	} else if mode == PassiveMode {
+
 		addr, err := f.pasvGetAddr()
 		if err != nil {
 			errChan <- err
 			return
 		}
-
 		// write command
 		if _, err = f.writeCommandAndGetResponse(cmd); err != nil {
 			errChan <- err
