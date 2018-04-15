@@ -131,7 +131,18 @@ func TestParsePasvOk(t *testing.T) {
 //
 // }
 
-func internalFilesOps(t *testing.T, mode Mode) {
+// func internalFileOpsSimple(t *testing.T, mode Mode){
+// 	ftpConn, _, err := authenticatedConn()
+//
+// 	if err != nil {
+// 		t.Fatalf("Conn error: %s", err.Error())
+// 	}
+//
+// 	defer ftpConn.Quit()
+//
+// }
+
+func internalFilesOps(t *testing.T, mode Mode, useSimple bool) {
 	ftpConn, _, err := authenticatedConn()
 
 	if err != nil {
@@ -167,21 +178,31 @@ func internalFilesOps(t *testing.T, mode Mode) {
 
 	size := stat.Size()
 
-	go ftpConn.Store(mode, "tmp.txt", "tmp.txt", doneChanStore, abortChanStore,
-		startingChanStore, errChanStore, false)
+	if useSimple == false {
+		go ftpConn.Store(mode, "tmp.txt", "tmp.txt", doneChanStore, abortChanStore,
+			startingChanStore, errChanStore, false)
 
-	loop := true
-	for loop {
-		select {
-		case err = <-errChanStore:
+		loop := true
+		for loop {
+			select {
+			case err = <-errChanStore:
+				t.Errorf("Got error: %s", err.Error())
+				return
+			case <-doneChanStore:
+				t.Logf("Store transfer has finished\n")
+				loop = false
+			case <-startingChanStore:
+				t.Logf("Store transfer has started\n")
+			}
+		}
+	} else {
+
+		// use simple api
+		if err = ftpConn.StoreSimple(mode, "tmp.txt", "tmp.txt"); err != nil {
 			t.Errorf("Got error: %s", err.Error())
 			return
-		case <-doneChanStore:
-			t.Logf("Store transfer has finished\n")
-			loop = false
-		case <-startingChanStore:
-			t.Logf("Store transfer has started\n")
 		}
+
 	}
 
 	doneChanRetr := make(chan struct{}, 1)
@@ -189,24 +210,36 @@ func internalFilesOps(t *testing.T, mode Mode) {
 	startingChanRetr := make(chan struct{}, 1)
 	errChanRetr := make(chan error, 1)
 
-	go ftpConn.Retrieve(mode, "tmp.txt", "temp_get.txt",
-		doneChanRetr,
-		abortChanRetr,
-		startingChanRetr,
-		errChanRetr)
+	if useSimple == false {
 
-	loop = true
-	for loop {
-		select {
-		case err = <-errChanRetr:
-			t.Errorf("Got error: %s", err.Error())
-			return
-		case <-startingChanRetr:
-			t.Logf("Retr transfer has started\n")
-		case <-doneChanRetr:
-			t.Logf("Retr transfer has started\n")
-			loop = false
+		go ftpConn.Retrieve(mode, "tmp.txt", "temp_get.txt",
+			doneChanRetr,
+			abortChanRetr,
+			startingChanRetr,
+			errChanRetr)
+
+		loop := true
+
+		for loop {
+			select {
+			case err = <-errChanRetr:
+				t.Errorf("Got error: %s", err.Error())
+				return
+			case <-startingChanRetr:
+				t.Logf("Retr transfer has started\n")
+			case <-doneChanRetr:
+				t.Logf("Retr transfer has started\n")
+				loop = false
+			}
 		}
+	} else {
+
+		// use simple api
+		if err = ftpConn.RetrSimple(mode, "tmp.txt", "temp_get.txt"); err != nil {
+			t.Errorf("Got error: %s", err)
+			return
+		}
+
 	}
 
 	//reading downloaded file.
@@ -245,9 +278,17 @@ func internalFilesOps(t *testing.T, mode Mode) {
 	t.Logf("DELE resp: %s", response.String())
 }
 
-func TestFileOpsActive(t *testing.T) {
+func TestFileOpsActiveSync(t *testing.T) {
+	internalFilesOps(t, ActiveMode, true)
+}
 
-	internalFilesOps(t, ActiveMode)
+func TestFileOpsPassiveSync(t *testing.T) {
+	internalFilesOps(t, PassiveMode, true)
+}
+
+func TestFileOpsActiveAsync(t *testing.T) {
+
+	internalFilesOps(t, ActiveMode, false)
 
 	// ftpConn, _, err := authenticatedConn()
 	//
@@ -363,9 +404,9 @@ func TestFileOpsActive(t *testing.T) {
 
 }
 
-func TestFileOpsPassive(t *testing.T) {
+func TestFileOpsPassiveAsync(t *testing.T) {
 
-	internalFilesOps(t, PassiveMode)
+	internalFilesOps(t, PassiveMode, false)
 
 	// ftpConn, _, err := authenticatedConn()
 	//
@@ -560,7 +601,8 @@ func internalDirOps(t *testing.T, mode Mode) {
 
 func TestDirOpsActive(t *testing.T) {
 
-	internalFilesOps(t, ActiveMode)
+	// internalFilesOps(t, ActiveMode,)
+	internalDirOps(t, ActiveMode)
 
 	// ftpConn, _, err := authenticatedConn()
 	//
