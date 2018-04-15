@@ -23,16 +23,18 @@ import (
 	"os"
 	"strings"
 
-	pb "gopkg.in/cheggaaa/pb.v1"
+	"github.com/vbauerster/mpb"
 )
 
 type shell struct {
-	in *bufio.Reader
+	in       *bufio.Reader
+	progress *mpb.Progress
 }
 
 func newshell() *shell {
 	return &shell{
-		in: bufio.NewReader(os.Stdin),
+		in:       bufio.NewReader(os.Stdin),
+		progress: mpb.New(),
 	}
 }
 
@@ -77,12 +79,11 @@ func (s *shell) printError(msg string, exit bool) {
 	}
 }
 
-func (s *shell) displayProgressBar(max int) *pb.ProgressBar {
-	progressBar := pb.New(max)
-	progressBar.SetUnits(pb.U_BYTES)
-	progressBar.ManualUpdate = true
-	// progressBar.Start()
-	return progressBar
+func (s *shell) displayProgressBar(max int) *mpb.Bar {
+	// progressBar := pb.New(max)
+	// return progressBar
+	bar := s.progress.AddBar(int64(max))
+	return bar
 }
 
 // func (s *shell) LogAndAuth(uri string) {

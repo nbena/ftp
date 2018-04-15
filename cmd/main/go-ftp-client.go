@@ -20,7 +20,9 @@ package main
 import (
 	"fmt"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 
 	"github.com/nbena/ftp"
 )
@@ -50,6 +52,9 @@ func main() {
 
 	parseFlags()
 
+	quitChan := make(chan os.Signal)
+	signal.Notify(quitChan, syscall.SIGINT, syscall.SIGSTOP)
+
 	if showCiphers {
 		ciphers := ftp.CipherSuitesString(allowWeakHash)
 		for _, cipher := range ciphers {
@@ -75,6 +80,13 @@ func main() {
 	if err != nil {
 		shell.printError(err.Error(), true)
 	}
+
+	go func() {
+		<-quitChan
+		fmt.Printf("received stop exiting")
+		conn.Quit()
+		os.Exit(0)
+	}()
 
 	loop := true
 
@@ -158,25 +170,78 @@ func main() {
 				pb := shell.displayProgressBar(size)
 
 				// doneChan = doneChanStruct
-				_, err = cmd.apply(conn, false, doneChanStruct, errChan, abortChan,
+				/*_, err = */
+				cmd.apply(conn, false, doneChanStruct, errChan, abortChan,
 					startingChan,
 					onEachChan)
 
-				if err != nil {
-					go func() {
-						select {
-						case <-doneChanStruct:
-							pb.Finish()
-						case <-onEachChan:
-							pb.Increment()
-						case <-startingChan:
-							pb.Start()
-						}
-					}()
-				} else {
-					shell.printError(err.Error(), false)
-					continue
-				}
+				// if err != nil {
+				<-startingChan
+				// pb.Start()
+
+				// <-doneChanStruct
+				// pb.Set(100)
+				// pb.Finish()
+				// finished := 1
+				// var finishedLock sync.Mutex
+
+				// go func() {
+				// 	stayInLoop := true
+				// 	for stayInLoop {
+				// 		<-onEachChan
+				// 		finishedLock.Lock()
+				// 		pb.Increment()
+				// 		if finished == 0 {
+				// 			stayInLoop = false
+				// 		}
+				// 		finishedLock.Unlock()
+				// 	}
+				// }()
+
+				// go func() {
+				// 	<-doneChanStruct
+				// 	finishedLock.Lock()
+				// 	// defer finishedLock.Unlock()
+				// 	finished = 0
+				// 	// pb.Set(size)
+				// 	pb.Finish()
+				// 	finishedLock.Unlock()
+				// }()
+				// continue
+				go func() {
+					<-doneChanStruct
+					pb.IncrBy(size)
+					shell.print("\n")
+				}()
+
+				continue
+
+				// go func() {
+				// 	fmt.Printf("calling func")
+				// 	fmt.Printf("go")
+				// 	stayInLoop := true
+				// 	// started := false
+				// 	for stayInLoop {
+				// 		select {
+				// 		case <-doneChanStruct:
+				// 			pb.Finish()
+				// 			stayInLoop = false
+				// 		case <-onEachChan:
+				// 		pb.Increment()
+				// 		case err := <-errChan:
+				// 			// fmt.Printf("error")
+				// 			pb.Finish()
+				// 			shell.printError(err.Error(), false)
+				// 			stayInLoop = false
+				// 		}
+				// 	}
+				// }()
+
+				// fmt.Printf("i'm here")
+				// } else {
+				// 	shell.printError(err.Error(), false)
+				// 	continue
+				// }
 
 			} else {
 				gotResponse, err = cmd.apply(conn, true, doneChan, errChan, abortChan, startingChan)

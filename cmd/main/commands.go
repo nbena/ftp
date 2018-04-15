@@ -289,6 +289,12 @@ func parseTwoArg(first, second, third string) (*cmd, error) {
 	switch first {
 	case mv:
 		command = commandRename
+	case rm:
+		command = commandRm
+	case get:
+		command = commandGet
+	case put:
+		command = commandPut
 	default:
 		err = fmt.Errorf("Unknown command: %s", first)
 	}
@@ -298,30 +304,30 @@ func parseTwoArg(first, second, third string) (*cmd, error) {
 	return &command, err
 }
 
-func parseNArg(first string, others []string) (*cmd, error) {
-	var command cmd
-	var err error
-	switch first {
-	case rm:
-		command = commandRm
-	case get:
-		command = commandGet
-		if len(others) != 2 {
-			err = fmt.Errorf("Wrong args length for 'get': %d, help: %s", len(others), helpMap[get])
-		}
-	case put:
-		command = commandPut
-		if len(others) != 2 {
-			err = fmt.Errorf("Wrong args length for 'put': %d, help: %s", len(others), helpMap[put])
-		}
-	default:
-		err = fmt.Errorf("Unknown command: %s", first)
-	}
-	if err == nil {
-		command.args = others
-	}
-	return &command, err
-}
+// func parseNArg(first string, others []string) (*cmd, error) {
+// 	var command cmd
+// 	var err error
+// 	switch first {
+// 	case rm:
+// 		command = commandRm
+// 	case get:
+// 		command = commandGet
+// 		if len(others) != 2 {
+// 			err = fmt.Errorf("Wrong args length for 'get': %d, help: %s", len(others), helpMap[get])
+// 		}
+// 	case put:
+// 		command = commandPut
+// 		if len(others) != 2 {
+// 			err = fmt.Errorf("Wrong args length for 'put': %d, help: %s", len(others), helpMap[put])
+// 		}
+// 	default:
+// 		err = fmt.Errorf("Unknown command n: %s", first)
+// 	}
+// 	if err == nil {
+// 		command.args = others
+// 	}
+// 	return &command, err
+// }
 
 func parse(s string) (*cmd, error) {
 	var cmd *cmd
@@ -335,12 +341,13 @@ func parse(s string) (*cmd, error) {
 		parsed := strings.Split(s, " ")
 		cmd, err = parseTwoArg(parsed[0], parsed[1], parsed[2])
 	} else {
-		parsed := strings.Split(s, " ")
-		if len(parsed) <= 2 {
-			err = fmt.Errorf("Fail to parse command: %s", s)
-		} else {
-			cmd, err = parseNArg(parsed[0], parsed[1:])
-		}
+		// parsed := strings.Split(s, " ")
+		// if len(parsed) <= 2 {
+		// 	err = fmt.Errorf("Fail to parse command: %s", s)
+		// } else {
+		// 	cmd, err = parseNArg(parsed[0], parsed[1:])
+		// }
+		err = fmt.Errorf("Unknown command: %s", s)
 	}
 	if err != nil {
 		return nil, err
