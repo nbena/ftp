@@ -95,7 +95,11 @@ type cmd struct {
 	function ftpFunction
 }
 
-func (c *cmd) apply(ftpConn *ftp.Conn, args ...interface{}) (interface{}, error) {
+func (c *cmd) apply(
+	ftpConn *ftp.Conn,
+	returnAsString bool,
+	args ...interface{},
+) (interface{}, error) {
 	switch c.cmd {
 
 	// no args
@@ -137,10 +141,19 @@ func (c *cmd) apply(ftpConn *ftp.Conn, args ...interface{}) (interface{}, error)
 		if err != nil {
 			return nil, err
 		}
-		return []interface{}{
+		var returnedArray []interface{}
+		array := []interface{}{
 			size,
 			lastModificationTime,
-		}, nil
+		}
+		if returnAsString {
+			returnedArray = append(returnedArray, fmt.Sprintf("Size: %d, last modified: %s",
+				size,
+				lastModificationTime.String()))
+		} else {
+			returnedArray = array
+		}
+		return returnedArray, nil
 	case ls:
 		doneChan := args[0].(chan []string)
 		errChan := args[1].(chan error)

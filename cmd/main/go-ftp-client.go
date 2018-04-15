@@ -133,7 +133,7 @@ func main() {
 			doneChan := doneChanStruct
 			// var doneChan interface{}
 			if cmd.cmd == ls {
-				/*_, err = */ cmd.apply(conn, doneChanStr, errChan, abortChan, startingChan)
+				/*_, err = */ cmd.apply(conn, false, doneChanStr, errChan, abortChan, startingChan)
 
 				select {
 				case <-errChan:
@@ -158,7 +158,7 @@ func main() {
 				pb := shell.displayProgressBar(size)
 
 				// doneChan = doneChanStruct
-				_, err = cmd.apply(conn, doneChanStruct, errChan, abortChan,
+				_, err = cmd.apply(conn, false, doneChanStruct, errChan, abortChan,
 					startingChan,
 					onEachChan)
 
@@ -179,10 +179,21 @@ func main() {
 				}
 
 			} else {
-				gotResponse, err = cmd.apply(conn, doneChan, errChan, abortChan, startingChan)
+				gotResponse, err = cmd.apply(conn, true, doneChan, errChan, abortChan, startingChan)
 				if err != nil {
 					shell.printError(err.Error(), false)
 					continue
+				}
+				if gotResponse != nil {
+					switch gotResponse.(type) {
+					case string:
+						shell.print(gotResponse.(string))
+					case []interface{}:
+						shell.print(gotResponse.([]interface{})[0].(string))
+					case *ftp.Response:
+						shell.print(gotResponse.(*ftp.Response).String())
+						// shell.print(response.String())
+					}
 				}
 			}
 
@@ -198,16 +209,9 @@ func main() {
 			// 		shell.print(dir)
 			// 	}
 			// }
-			if gotResponse != nil {
-				switch gotResponse.(type) {
-				case string:
-					shell.print(gotResponse.(string))
-				}
-				// shell.print(response.String())
-			}
 
 			if cmd.cmd == "cd" && alwaysPwd {
-				currentDir, err := commandPwd.apply(conn)
+				currentDir, err := commandPwd.apply(conn, true)
 				if err != nil {
 					// do nothing, it's a command that hasn't been required by the user.
 				} else {
