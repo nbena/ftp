@@ -291,7 +291,7 @@ func (f *Conn) StoreSimple(
 	errChan := make(chan error, 1)
 
 	f.internalStore(mode, src, dst, doneChan, abortChan, startingChan,
-		errChan, false)
+		errChan, nil, false)
 
 	var returned error
 
@@ -316,7 +316,7 @@ func (f *Conn) RetrSimple(
 	startingChan := make(chan struct{}, 1)
 	errChan := make(chan error, 1)
 
-	f.internalRetr(mode, src, dst, doneChan, abortChan, startingChan, errChan)
+	f.internalRetr(mode, src, dst, doneChan, abortChan, startingChan, errChan, nil)
 
 	var returned error
 
@@ -350,6 +350,7 @@ func (f *Conn) Store(
 	abortChan <-chan struct{},
 	startingChan chan<- struct{},
 	errChan chan<- error,
+	onEachChan chan<- struct{},
 	deleteIfAbort bool,
 ) {
 
@@ -378,7 +379,15 @@ func (f *Conn) Store(
 			 indicating that the abort command was successfully
 			 processed.
 	*/
-	f.internalStore(mode, src, dst, doneChan, abortChan, startingChan, errChan, deleteIfAbort)
+	f.internalStore(mode,
+		src,
+		dst,
+		doneChan,
+		abortChan,
+		startingChan,
+		errChan,
+		onEachChan,
+		deleteIfAbort)
 }
 
 // Retrieve download a file located at filepathSrc to filepathDest.
@@ -390,7 +399,17 @@ func (f *Conn) Retrieve(mode Mode,
 	doneChan chan<- struct{},
 	abortChan <-chan struct{},
 	startingChan chan<- struct{},
-	errChan chan<- error) {
+	errChan chan<- error,
+	onEachChan chan<- struct{},
+) {
 
-	f.internalRetr(mode, filepathSrc, filepathDest, doneChan, abortChan, startingChan, errChan)
+	f.internalRetr(mode,
+		filepathSrc,
+		filepathDest,
+		doneChan,
+		abortChan,
+		startingChan,
+		errChan,
+		onEachChan,
+	)
 }

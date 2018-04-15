@@ -22,6 +22,8 @@ import (
 	"fmt"
 	"os"
 	"strings"
+
+	pb "gopkg.in/cheggaaa/pb.v1"
 )
 
 type shell struct {
@@ -73,6 +75,14 @@ func (s *shell) printError(msg string, exit bool) {
 	if exit {
 		os.Exit(1)
 	}
+}
+
+func (s *shell) displayProgressBar(max int) *pb.ProgressBar {
+	progressBar := pb.New(max)
+	progressBar.SetUnits(pb.U_BYTES)
+	progressBar.ManualUpdate = true
+	// progressBar.Start()
+	return progressBar
 }
 
 // func (s *shell) LogAndAuth(uri string) {

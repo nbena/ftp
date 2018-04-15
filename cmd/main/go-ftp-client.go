@@ -83,6 +83,9 @@ func main() {
 	errChan := make(chan error, 10)
 	abortChan := make(chan struct{}, 10)
 	startingChan := make(chan struct{}, 10)
+	onEachChan := make(chan struct{}, 10)
+
+	var gotResponse interface{}
 
 	fmt.Printf("Server tells: %s\n", response.String())
 
@@ -127,29 +130,80 @@ func main() {
 				shell.printError(err.Error(), false)
 				continue
 			}
-			// doneChan := doneChanStruct
-			var doneChan interface{}
+			doneChan := doneChanStruct
+			// var doneChan interface{}
 			if cmd.cmd == ls {
-				doneChan = doneChanStr
+				/*_, err = */ cmd.apply(conn, doneChanStr, errChan, abortChan, startingChan)
+
+				select {
+				case <-errChan:
+					shell.printError(err.Error(), false)
+
+				case dirs := <-doneChanStr:
+					for _, dir := range dirs {
+						shell.print(dir)
+					}
+				}
+				continue
+
+			} else if cmd.cmd == put || cmd.cmd == get {
+
+				// issuing a size
+				_, size, err := conn.Size(cmd.args[0])
+				if err != nil {
+					shell.printError(err.Error(), false)
+					continue
+				}
+
+				pb := shell.displayProgressBar(size)
+
+				// doneChan = doneChanStruct
+				_, err = cmd.apply(conn, doneChanStruct, errChan, abortChan,
+					startingChan,
+					onEachChan)
+
+				if err != nil {
+					go func() {
+						select {
+						case <-doneChanStruct:
+							pb.Finish()
+						case <-onEachChan:
+							pb.Increment()
+						case <-startingChan:
+							pb.Start()
+						}
+					}()
+				} else {
+					shell.printError(err.Error(), false)
+					continue
+				}
+
 			} else {
-				doneChan = doneChanStruct
+				gotResponse, err = cmd.apply(conn, doneChan, errChan, abortChan, startingChan)
+				if err != nil {
+					shell.printError(err.Error(), false)
+					continue
+				}
 			}
-			response, err := cmd.apply(conn, doneChan, errChan, abortChan, startingChan)
+
 			// _, err = cmd.apply(conn, doneChan, errChan, abortChan, startingChan)
-			if err != nil {
-				shell.printError(err.Error(), false)
-			}
-			if cmd.cmd == ls {
-				dirs := <-doneChanStr
-				for _, dir := range dirs {
-					shell.print(dir)
-				}
-			}
-			if response != nil {
-				switch response.(type) {
+			// if err != nil {
+			// 	shell.printError(err.Error(), false)
+			// 	continue
+			// }
+
+			// if cmd.cmd == ls {
+			// 	dirs := <-doneChanStr
+			// 	for _, dir := range dirs {
+			// 		shell.print(dir)
+			// 	}
+			// }
+			if gotResponse != nil {
+				switch gotResponse.(type) {
 				case string:
-					shell.print(response.(string))
+					shell.print(gotResponse.(string))
 				}
+				// shell.print(response.String())
 			}
 
 			if cmd.cmd == "cd" && alwaysPwd {

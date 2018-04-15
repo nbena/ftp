@@ -164,6 +164,7 @@ func (c *cmd) apply(ftpConn *ftp.Conn, args ...interface{}) (interface{}, error)
 		errChan := args[1].(chan error)
 		abortChan := args[2].(chan struct{})
 		startingChan := args[3].(chan struct{})
+		onEachChan := args[4].(chan struct{})
 		ftpConn.Store(ftp.IndMode,
 			c.args[0],
 			c.args[1],
@@ -171,6 +172,7 @@ func (c *cmd) apply(ftpConn *ftp.Conn, args ...interface{}) (interface{}, error)
 			abortChan,
 			startingChan,
 			errChan,
+			onEachChan,
 			// deleteIfAbort is a global variable.
 			deleteIfAbort)
 		// return nil, nil
@@ -180,6 +182,7 @@ func (c *cmd) apply(ftpConn *ftp.Conn, args ...interface{}) (interface{}, error)
 		errChan := args[1].(chan error)
 		abortChan := args[2].(chan struct{})
 		startingChan := args[3].(chan struct{})
+		onEachChan := args[4].(chan struct{})
 		ftpConn.Retrieve(ftp.IndMode,
 			c.args[0],
 			c.args[1],
@@ -187,7 +190,9 @@ func (c *cmd) apply(ftpConn *ftp.Conn, args ...interface{}) (interface{}, error)
 			abortChan,
 			startingChan,
 			// delete if abort is not present because it's always done.
-			errChan)
+			errChan,
+			onEachChan,
+		)
 		// n
 	case rm:
 		var responses []*ftp.Response

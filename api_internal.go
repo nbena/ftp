@@ -578,6 +578,7 @@ func (f *Conn) internalStore(
 	abortChan <-chan struct{},
 	startingChan chan<- struct{},
 	errChan chan<- error,
+	onEachChan chan<- struct{},
 	deleteIfAbort bool,
 ) {
 
@@ -739,6 +740,9 @@ func (f *Conn) internalStore(
 				errChan <- err
 				return
 			}
+			if onEachChan != nil {
+				onEachChan <- struct{}{}
+			}
 		}
 	}
 
@@ -763,7 +767,9 @@ func (f *Conn) internalRetr(mode Mode,
 	doneChan chan<- struct{},
 	abortChan <-chan struct{},
 	startingChan chan<- struct{},
-	errChan chan<- error) {
+	errChan chan<- error,
+	onEachChan chan<- struct{},
+) {
 
 	var receiver io.ReadCloser
 
@@ -882,6 +888,10 @@ func (f *Conn) internalRetr(mode Mode,
 				receiver.Close()
 				errChan <- err
 				return
+			}
+
+			if onEachChan != nil {
+				onEachChan <- struct{}{}
 			}
 
 			// so we can skip null bytes that are added
