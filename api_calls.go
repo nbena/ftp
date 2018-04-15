@@ -276,3 +276,121 @@ func (f *Conn) AuthTLS(failback bool) (*Response, error) {
 
 	return response, err
 }
+
+// StoreSimple is a simplified version of function Store which does not
+// involves the use of channels, so it's suitable for uses when is not necessary
+// to do an 'async' uploading.
+func (f *Conn) StoreSimple(
+	mode Mode,
+	src,
+	dst string,
+) error {
+	doneChan := make(chan struct{}, 1)
+	abortChan := make(chan struct{}, 1)
+	startingChan := make(chan struct{}, 1)
+	errChan := make(chan error, 1)
+
+	f.internalStore(mode, src, dst, doneChan, abortChan, startingChan,
+		errChan, false)
+
+	var returned error
+
+	select {
+	case <-doneChan:
+	case err := <-errChan:
+		returned = err
+	}
+	return returned
+}
+
+// RetrSimple is a simplified version of function Retrieve which does not
+// involves the use of channels, so it's suitable for uses when is not necessary
+// to do an 'async' downloading.
+func (f *Conn) RetrSimple(
+	mode Mode,
+	src,
+	dst string,
+) error {
+	doneChan := make(chan struct{}, 1)
+	abortChan := make(chan struct{}, 1)
+	startingChan := make(chan struct{}, 1)
+	errChan := make(chan error, 1)
+
+	f.internalRetr(mode, src, dst, doneChan, abortChan, startingChan, errChan)
+
+	var returned error
+
+	select {
+	case <-doneChan:
+	case err := <-errChan:
+		returned = err
+	}
+	return returned
+}
+
+// Store loads a file to the server. The file is 'filepath',
+// specifies which FTP you want to use,
+// doneChan notifies when transfering is finished, if an error
+// occurs, it will be written on errChan, casuing the function to immediately
+// exit.
+// If you want to abort this transfering, write to abort. That channel
+// should be buffered, because this function don't check until it starts transfering.
+// When the abort command has been sent we wait for a response,
+// then the channel is closed and an empty struct wil be written on
+// doneChan.
+// Sending something to abortChan, will not cause the file to be deleted,
+// because that channel is checked AFTER THE ISSUING OF THE COMMAND
+// (but before the transfer).
+// In order to delete the file, pass the option.
+func (f *Conn) Store(
+	mode Mode,
+	src string,
+	dst string,
+	doneChan chan<- struct{},
+	abortChan <-chan struct{},
+	startingChan chan<- struct{},
+	errChan chan<- error,
+	deleteIfAbort bool,
+) {
+
+	/*
+				This command tells the server to abort the previous FTP
+		service command and any associated transfer of data.  The
+		abort command may require "special action", as discussed in
+		the Section on FTP Commands, to force recognition by the
+		server.  No action is to be taken if the previous command
+		has been completed (including data transfer).  The control
+		connection is not to be closed by the server, but the data
+		connection must be closed.
+
+		There are two cases for the server upon receipt of this
+		command: (1) the FTP service command was already completed,
+		or (2) the FTP service command is still in progress.
+
+			 In the first case, the server closes the data connection
+			 (if it is open) and responds with a 226 reply, indicating
+			 that the abort command was successfully processed.
+
+			 In the second case, the server aborts the FTP service in
+			 progress and closes the data connection, returning a 426
+			 reply to indicate that the service request terminated
+			 abnormally.  The server then sends a 226 reply,
+			 indicating that the abort command was successfully
+			 processed.
+	*/
+	f.internalStore(mode, src, dst, doneChan, abortChan, startingChan, errChan, deleteIfAbort)
+}
+
+// Retrieve download a file located at filepathSrc to filepathDest.
+// When finished, it writes into doneChan. Any error, that'll make it immediately exits,
+// is written into errChan.
+func (f *Conn) Retrieve(mode Mode,
+	filepathSrc,
+	filepathDest string,
+	doneChan chan<- struct{},
+	abortChan <-chan struct{},
+	startingChan chan<- struct{},
+	errChan chan<- error) {
+
+	f.internalRetr(mode, filepathSrc, filepathDest, doneChan, abortChan, startingChan, errChan)
+}
