@@ -719,6 +719,9 @@ func (f *Conn) internalStore(
 					errChan <- err
 				}
 			}
+			if onEachChan != nil {
+				close(onEachChan)
+			}
 			doneChan <- struct{}{}
 			return
 
@@ -870,6 +873,9 @@ func (f *Conn) internalRetr(mode Mode,
 			if err != nil {
 				errChan <- err
 			} else {
+				if onEachChan != nil {
+					close(onEachChan)
+				}
 				doneChan <- struct{}{}
 			}
 			return

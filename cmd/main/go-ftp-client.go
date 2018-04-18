@@ -22,9 +22,11 @@ import (
 	"os"
 	"os/signal"
 	"strings"
+	"sync"
 	"syscall"
 
 	"github.com/nbena/ftp"
+	pb "gopkg.in/cheggaaa/pb.v1"
 )
 
 func getConn() (*ftp.Conn, *ftp.Response, error) {
@@ -72,7 +74,7 @@ func main() {
 		}
 	}
 
-	shell := newshell()
+	shell := newShell()
 	if username == "" || password == "" {
 		username, password = shell.askCredential()
 	}
@@ -80,6 +82,8 @@ func main() {
 	if err != nil {
 		shell.printError(err.Error(), true)
 	}
+
+	shell.start()
 
 	go func() {
 		<-quitChan
@@ -95,7 +99,7 @@ func main() {
 	errChan := make(chan error, 10)
 	abortChan := make(chan struct{}, 10)
 	startingChan := make(chan struct{}, 10)
-	onEachChan := make(chan struct{}, 10)
+	// onEachChan := make(chan struct{}, 10)
 
 	var gotResponse interface{}
 
@@ -108,9 +112,42 @@ func main() {
 		location = localIPParsed.String()
 	}
 
+	skipNextScanLine := false
+	var lockSkipNextScanLine sync.Mutex
+
+	// unlocked := false
 	for loop {
+
+		lockSkipNextScanLine.Lock()
+
+		// if skipNextScanLine {
+		// 	skipNextScanLine = false
+		// 	// shell.scanLine()
+		// 	// shell.scanLine()
+		// 	shell.flush()
+		// 	lockSkipNextScanLine.Unlock()
+		// 	unlocked = true
+		// 	continue
+		// }
+		// if unlocked == false {
+		// 	unlocked = true
+		// 	lockSkipNextScanLine.Unlock()
+		// }
+
 		shell.prompt(location)
+		lockSkipNextScanLine.Unlock()
 		line := shell.scanLine()
+		// lockSkipNextScanLine.Unlock()
+
+		// shell.print(fmt.Sprintf("I read '%s'", line))
+
+		if strings.HasPrefix(line, "Operation ") ||
+			strings.HasPrefix(line, "\nOperation") ||
+			strings.HasPrefix(line, "\n") ||
+			line == "" {
+			continue
+		}
+		// lockSkipNextScanLine.Unlock()
 		// splitting line
 		// splitted_line := strings.Split(line, " ")
 		// if len(splitted_line) >
@@ -160,6 +197,8 @@ func main() {
 
 			} else if cmd.cmd == put || cmd.cmd == get {
 
+				onEachChan := make(chan struct{}, 1)
+
 				// issuing a size
 				_, size, err := conn.Size(cmd.args[0])
 				if err != nil {
@@ -167,7 +206,16 @@ func main() {
 					continue
 				}
 
-				pb := shell.displayProgressBar(size)
+				var pb *pb.ProgressBar
+
+				shell.print(fmt.Sprintf("%v", asyncDownload))
+
+				if asyncDownload == false {
+					pb = shell.displayProgressBar(size)
+					pb.Start()
+				} else {
+					onEachChan = nil
+				}
 
 				// doneChan = doneChanStruct
 				/*_, err = */
@@ -177,71 +225,30 @@ func main() {
 
 				// if err != nil {
 				<-startingChan
-				// pb.Start()
 
-				// <-doneChanStruct
-				// pb.Set(100)
-				// pb.Finish()
-				// finished := 1
-				// var finishedLock sync.Mutex
-
-				// go func() {
-				// 	stayInLoop := true
-				// 	for stayInLoop {
-				// 		<-onEachChan
-				// 		finishedLock.Lock()
-				// 		pb.Increment()
-				// 		if finished == 0 {
-				// 			stayInLoop = false
-				// 		}
-				// 		finishedLock.Unlock()
-				// 	}
-				// }()
-
-				// go func() {
-				// 	<-doneChanStruct
-				// 	finishedLock.Lock()
-				// 	// defer finishedLock.Unlock()
-				// 	finished = 0
-				// 	// pb.Set(size)
-				// 	pb.Finish()
-				// 	finishedLock.Unlock()
-				// }()
-				// continue
-				go func() {
+				if asyncDownload {
+					go func() {
+						<-doneChanStruct
+						lockSkipNextScanLine.Lock()
+						shell.print("\n")
+						shell.print(fmt.Sprintf("Operation %s on %v finished\n", cmd.cmd, cmd.args))
+						// shell.print("\n")
+						// shell.flush()
+						skipNextScanLine = true
+						lockSkipNextScanLine.Unlock()
+					}()
+					// asyncDownload == false
+				} else {
+					for _ = range onEachChan {
+						pb.Increment()
+					}
 					<-doneChanStruct
-					pb.IncrBy(size)
-					shell.print("\n")
-				}()
+					pb.Finish()
+					// shell.print("")
+					pb.FinishPrint("Operation completed")
+				}
 
-				continue
-
-				// go func() {
-				// 	fmt.Printf("calling func")
-				// 	fmt.Printf("go")
-				// 	stayInLoop := true
-				// 	// started := false
-				// 	for stayInLoop {
-				// 		select {
-				// 		case <-doneChanStruct:
-				// 			pb.Finish()
-				// 			stayInLoop = false
-				// 		case <-onEachChan:
-				// 		pb.Increment()
-				// 		case err := <-errChan:
-				// 			// fmt.Printf("error")
-				// 			pb.Finish()
-				// 			shell.printError(err.Error(), false)
-				// 			stayInLoop = false
-				// 		}
-				// 	}
-				// }()
-
-				// fmt.Printf("i'm here")
-				// } else {
-				// 	shell.printError(err.Error(), false)
-				// 	continue
-				// }
+				// continue
 
 			} else {
 				gotResponse, err = cmd.apply(conn, true, doneChan, errChan, abortChan, startingChan)
@@ -261,19 +268,6 @@ func main() {
 					}
 				}
 			}
-
-			// _, err = cmd.apply(conn, doneChan, errChan, abortChan, startingChan)
-			// if err != nil {
-			// 	shell.printError(err.Error(), false)
-			// 	continue
-			// }
-
-			// if cmd.cmd == ls {
-			// 	dirs := <-doneChanStr
-			// 	for _, dir := range dirs {
-			// 		shell.print(dir)
-			// 	}
-			// }
 
 			if cmd.cmd == "cd" && alwaysPwd {
 				currentDir, err := commandPwd.apply(conn, true)
