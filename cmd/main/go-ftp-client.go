@@ -83,7 +83,7 @@ func main() {
 		shell.printError(err.Error(), true)
 	}
 
-	shell.start()
+	// shell.start()
 
 	go func() {
 		<-quitChan
@@ -215,8 +215,6 @@ func main() {
 				}
 
 				var pb *pb.ProgressBar
-
-				shell.print(fmt.Sprintf("%v", asyncDownload))
 
 				if asyncDownload == false {
 					pb = shell.displayProgressBar(size)

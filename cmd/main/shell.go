@@ -32,7 +32,7 @@ type shell struct {
 	out *bufio.Writer
 	// progress      *mpb.Progress
 	// sreaderChannel chan string
-	writerChannel chan *shellOutput
+	// writerChannel chan *shellOutput
 }
 
 type shellOutput struct {
@@ -45,7 +45,7 @@ func newShell() *shell {
 		in:  bufio.NewReader(os.Stdin),
 		out: bufio.NewWriter(os.Stdout),
 		// progress: mpb.New(),
-		writerChannel: make(chan *shellOutput),
+		// writerChannel: make(chan *shellOutput),
 	}
 }
 
@@ -72,27 +72,17 @@ func (s *shell) askCredential() (string, string) {
 }
 
 func (s *shell) print(msg string) {
-	// fmt.Fprintf(s.out, msg+"\n")
-	s.writerChannel <- &shellOutput{
-		msg:   msg,
-		flush: false,
-	}
+	//fmt.Fprintf(s.out, msg+"\n")
+	s.out.WriteString(msg)
+	s.out.Flush()
 }
 
 func (s *shell) prompt(location string) {
-	// fmt.Printf("ftp:%s>", location)
-	s.writerChannel <- &shellOutput{
-		msg:   fmt.Sprintf("ftp:%s>", location),
-		flush: false,
-	}
+	s.print(fmt.Sprintf("ftp:%s>", location))
 }
 
 func (s *shell) goodbye() {
-	// fmt.Printf("goodbye\n")
-	s.writerChannel <- &shellOutput{
-		msg:   "goodbye\n",
-		flush: false,
-	}
+	s.print("goodbye\n")
 }
 
 func (s *shell) printError(msg string, exit bool) {
@@ -102,62 +92,9 @@ func (s *shell) printError(msg string, exit bool) {
 	}
 }
 
-func (s *shell) flush() {
-	// bufio.NewWriter(os.Stdout).Flush()
-	// s.in.ReadLine()
-	// s.print("i flushed")
-	s.writerChannel <- &shellOutput{
-		msg:   "",
-		flush: true,
-	}
-}
-
 func (s *shell) displayProgressBar(max int) *pb.ProgressBar {
 	progressBar := pb.New(max)
 	return progressBar
 	// bar := s.progress.AddBar(int64(max))
 	// return bar
 }
-
-func (s *shell) writer() chan *shellOutput {
-	return s.writerChannel
-}
-
-func (s *shell) start() {
-	go func() {
-		for output := range s.writerChannel {
-			// fmt.Printf("i received: %s", output.msg)
-			if output.flush {
-				// s.out.Flush()
-				s.in.ReadLine()
-			} else {
-				// fmt.Fprint(s.out, output.msg)
-				// fmt.Printf("i write it")
-				s.out.WriteString(output.msg)
-				s.out.Flush()
-			}
-		}
-	}()
-}
-
-// func newShell() *shell {
-// 	return &shell{
-// 		in:            bufio.NewReader(os.Stdin),
-// 		readerChannel: make(chan string),
-// 		writerChannel: make(chan string),
-// 	}
-// }
-//
-// func (s *shell) Channels() (chan string, chan string) {
-// 	return s.readerChannel, s.writerChannel
-// }
-//
-// func (s *shell) askForReading() {
-// 	line, _ := s.in.ReadString('\n')
-// 	//unsafe but not check error on stdin
-// 	s.readerChannel <- strings.TrimSpace(line)
-// }
-
-// func (s *shell) LogAndAuth(uri string) {
-// 	s.Print("Connecting and authenticating to " + uri + "...")
-// }
