@@ -112,7 +112,8 @@ func main() {
 		location = localIPParsed.String()
 	}
 
-	skipNextScanLine := false
+	// skipNextScanLine := false
+	prompt := true
 	var lockSkipNextScanLine sync.Mutex
 
 	// unlocked := false
@@ -133,10 +134,14 @@ func main() {
 		// 	unlocked = true
 		// 	lockSkipNextScanLine.Unlock()
 		// }
-
-		shell.prompt(location)
+		if prompt {
+			shell.prompt(location)
+		} else {
+			prompt = true
+		}
 		lockSkipNextScanLine.Unlock()
 		line := shell.scanLine()
+
 		// lockSkipNextScanLine.Unlock()
 
 		// shell.print(fmt.Sprintf("I read '%s'", line))
@@ -145,6 +150,9 @@ func main() {
 			strings.HasPrefix(line, "\nOperation") ||
 			strings.HasPrefix(line, "\n") ||
 			line == "" {
+			if prompt == false {
+				prompt = true
+			}
 			continue
 		}
 		// lockSkipNextScanLine.Unlock()
@@ -232,9 +240,11 @@ func main() {
 						lockSkipNextScanLine.Lock()
 						shell.print("\n")
 						shell.print(fmt.Sprintf("Operation %s on %v finished\n", cmd.cmd, cmd.args))
+						shell.prompt(location)
 						// shell.print("\n")
 						// shell.flush()
-						skipNextScanLine = true
+						prompt = false
+						// skipNextScanLine = true
 						lockSkipNextScanLine.Unlock()
 					}()
 					// asyncDownload == false
