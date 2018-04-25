@@ -53,6 +53,7 @@ func getConn() (*ftp.Conn, *ftp.Response, error) {
 func main() {
 
 	parseFlags()
+	interactiveMode := true
 
 	quitChan := make(chan os.Signal)
 	signal.Notify(quitChan, syscall.SIGINT, syscall.SIGSTOP)
@@ -65,19 +66,23 @@ func main() {
 		os.Exit(0)
 	}
 
-	if len(parsedCommands) > 0 {
-		for _, v := range parsedCommands {
-			if v.cmd == commandQuit.cmd {
-				// execute and exit.
-
-			}
-		}
+	// if len(parsedCommands) > 0 {
+	// 	interactiveMode = false
+	// 	for _, v := range parsedCommands {
+	// 		if v.cmd == commandQuit.cmd {
+	// 			// execute and exit.
+	// 		}
+	// 	}
+	// }
+	if len(commandsArray) > 0 {
+		interactiveMode = false
 	}
 
 	shell := newShell()
-	if username == "" || password == "" {
+	if username == "" || password == "" && interactiveMode {
 		username, password = shell.askCredential()
 	}
+
 	conn, response, err := getConn()
 	if err != nil {
 		shell.printError(err.Error(), true)
@@ -103,7 +108,8 @@ func main() {
 
 	var gotResponse interface{}
 
-	fmt.Printf("Server tells: %s\n", response.String())
+	// fmt.Printf("Server tells: %s\n", response.String())
+	shell.print(fmt.Sprintf("Server tells: %s\n", response.String()))
 
 	var location string
 	if alwaysPwd {
@@ -115,36 +121,27 @@ func main() {
 	// skipNextScanLine := false
 	prompt := true
 	var lockSkipNextScanLine sync.Mutex
+	currentCommandsIndex := 0
 
 	// unlocked := false
 	for loop {
 
 		lockSkipNextScanLine.Lock()
 
-		// if skipNextScanLine {
-		// 	skipNextScanLine = false
-		// 	// shell.scanLine()
-		// 	// shell.scanLine()
-		// 	shell.flush()
-		// 	lockSkipNextScanLine.Unlock()
-		// 	unlocked = true
-		// 	continue
-		// }
-		// if unlocked == false {
-		// 	unlocked = true
-		// 	lockSkipNextScanLine.Unlock()
-		// }
-		if prompt {
+		if prompt && interactiveMode {
 			shell.prompt(location)
 		} else {
 			prompt = true
 		}
 		lockSkipNextScanLine.Unlock()
-		line := shell.scanLine()
 
-		// lockSkipNextScanLine.Unlock()
+		var line string
 
-		// shell.print(fmt.Sprintf("I read '%s'", line))
+		if interactiveMode {
+			line = shell.scanLine()
+		} else {
+			line = commandsArray[currentCommandsIndex]
+		}
 
 		if strings.HasPrefix(line, "Operation ") ||
 			strings.HasPrefix(line, "\nOperation") ||
@@ -155,10 +152,12 @@ func main() {
 			}
 			continue
 		}
-		// lockSkipNextScanLine.Unlock()
-		// splitting line
-		// splitted_line := strings.Split(line, " ")
-		// if len(splitted_line) >
+
+		currentCommandsIndex++
+		if currentCommandsIndex == len(commandsArray)-1 {
+			loop = false
+			// next iteration we'll exit.
+		}
 
 		if line == quit {
 			if _, err := conn.Quit(); err != nil {
@@ -309,6 +308,6 @@ func main() {
 		}
 	}
 
-	defer conn.Quit()
+	// defer conn.Quit()
 
 }

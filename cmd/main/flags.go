@@ -51,6 +51,8 @@ var (
 	asyncDownload   bool
 
 	ftpDefaultMode ftp.Mode
+
+	commandsArray []string
 )
 
 func parseFlags() {
@@ -90,11 +92,18 @@ func parseFlags() {
 		ftpDefaultMode = ftp.PassiveMode
 	}
 
+	// if commands != "" {
+	// 	parsedCommands, err = parseAllCommands(commands)
+	// 	if err != nil {
+	// 		fmt.Fprintf(os.Stderr, err.Error())
+	// 		os.Exit(1)
+	// 	}
+	// }
 	if commands != "" {
-		parsedCommands, err = parseAllCommands(commands)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, err.Error())
-			os.Exit(1)
+		commandsArray = strings.Split(commands, ";")
+		if commandsArray[len(commandsArray)-1] != quit {
+			// if a quit is not provided we add by ourselves(?) the command
+			commandsArray = append(commandsArray, quit)
 		}
 	}
 
