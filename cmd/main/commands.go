@@ -109,6 +109,7 @@ var (
 		help:    &helpEntry{help: helpHelp, isLong: false},
 		setMode: &helpEntry{help: setModeHelp, isLong: true},
 		getMode: &helpEntry{help: getModeHelp, isLong: true},
+		cd:      &helpEntry{help: cdHelp, isLong: false},
 	}
 )
 
@@ -444,11 +445,11 @@ var (
 		required: false,
 		n:        0,
 	}
-	commandAbort = cmd{
-		cmd:      "abort",
-		required: false,
-		n:        1,
-	}
+	// commandAbort = cmd{
+	// 	cmd:      "abort",
+	// 	required: false,
+	// 	n:        1,
+	// }
 	commandCd = cmd{
 		cmd:      "cd",
 		required: true,
