@@ -298,7 +298,7 @@ func TestFileOpsPassiveAsync(t *testing.T) {
 	internalFilesOps(t, PassiveMode, false)
 }
 
-func internalDirOps(t *testing.T, mode Mode) {
+func internalDirOps(t *testing.T, mode Mode, useSimple bool) {
 	ftpConn, _, err := authenticatedConn()
 
 	if err != nil {
@@ -343,45 +343,75 @@ func internalDirOps(t *testing.T, mode Mode) {
 	doneChanDir := make(chan []string)
 	errChanDir := make(chan error, 1)
 
-	go ftpConn.Ls(mode, doneChanLs, errChanLs)
-	select {
-	case lsResponse = <-doneChanLs:
-	case err = <-errChanLs:
-		t.Errorf("Got error: %s", err.Error())
-		return
-	}
+	// var responseStr string
 
-	go ftpConn.LsDir(mode, "temp", doneChanDir, errChanDir)
-	select {
-	case lsDirResponse = <-doneChanDir:
-	case err = <-errChanDir:
-		t.Errorf("Got error: %s", err.Error())
-		return
-	}
-
-	// this will throw an error
-
-	doneChanLsErr := make(chan []string)
-	errChanLsErr := make(chan error, 1)
-
-	go ftpConn.LsDir(mode, "tmp_renamed", doneChanLsErr, errChanLsErr)
-
-	select {
-	case err = <-errChanLsErr:
-		//if !inverseResponse(err.Error()).IsFileNotExists() {
-		// building a response from this error.
-		response, err := newFtpResponse(err.Error())
-		if err != nil {
-			t.Errorf(err.Error())
-			return
-		}
-		if response.Code != FileUnavailable {
+	if useSimple == false {
+		go ftpConn.Ls(mode, doneChanLs, errChanLs)
+		select {
+		case lsResponse = <-doneChanLs:
+		case err = <-errChanLs:
 			t.Errorf("Got error: %s", err.Error())
 			return
 		}
-	case <-doneChanLsErr:
-		t.Errorf("Got 0 error while expecting one")
-		return
+
+		go ftpConn.LsDir(mode, "temp", doneChanDir, errChanDir)
+		select {
+		case lsDirResponse = <-doneChanDir:
+		case err = <-errChanDir:
+			t.Errorf("Got error: %s", err.Error())
+			return
+		}
+
+		// this will throw an error
+
+		doneChanLsErr := make(chan []string)
+		errChanLsErr := make(chan error, 1)
+
+		go ftpConn.LsDir(mode, "tmp_renamed", doneChanLsErr, errChanLsErr)
+
+		select {
+		case err = <-errChanLsErr:
+			//if !inverseResponse(err.Error()).IsFileNotExists() {
+			// building a response from this error.
+			response, err := newFtpResponse(err.Error())
+			if err != nil {
+				t.Errorf(err.Error())
+				return
+			}
+			if response.Code != FileUnavailable {
+				t.Errorf("Got error: %s", err.Error())
+				return
+			}
+		case <-doneChanLsErr:
+			t.Errorf("Got 0 error while expecting one")
+			return
+		}
+	} else {
+		lsResponse, err = ftpConn.LsSimple(mode)
+		if err != nil {
+			t.Errorf("Got error: %s", err.Error())
+			return
+		}
+		lsDirResponse, err = ftpConn.LsDirSimple(mode, "temp")
+		if err != nil {
+			t.Errorf("Got error: %s", err.Error())
+			return
+		}
+		_, err = ftpConn.LsDirSimple(mode, "tmp_renamed")
+		if err != nil {
+			response, err := newFtpResponse(err.Error())
+			if err != nil {
+				t.Errorf(err.Error())
+				return
+			}
+			if response.Code != FileUnavailable {
+				t.Errorf("Got error: %s", err.Error())
+				return
+			}
+		} else {
+			t.Errorf("Got 0 error while expecting one")
+			return
+		}
 	}
 
 	rmResponse, err := ftpConn.DeleteDir("temp")
@@ -399,8 +429,12 @@ func internalDirOps(t *testing.T, mode Mode) {
 	t.Logf("RMD temp resp: %s", rmResponse.String())
 }
 
-func TestDirOpsActive(t *testing.T) {
-	internalDirOps(t, ActiveMode)
+func TestDirOpsActiveSimple(t *testing.T) {
+	internalDirOps(t, ActiveMode, true)
+}
+
+func TestDirOpsActiveNoSimple(t *testing.T) {
+	internalDirOps(t, ActiveMode, false)
 }
 
 func TestRename(t *testing.T) {

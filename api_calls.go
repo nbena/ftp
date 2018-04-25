@@ -116,6 +116,38 @@ func (f *Conn) Cd(path string) (*Response, error) {
 	return unexpectedErrorOrResponse(CdOk, resp)
 }
 
+// LsSimple performs a LIST on the current directory in a synchronous mode.
+func (f *Conn) LsSimple(mode Mode) ([]string, error) {
+	doneChan := make(chan []string, 1)
+	errChan := make(chan error, 1)
+	f.internalLs(mode, "", doneChan, errChan)
+
+	var returnedError error
+	var returnedDirs []string
+	select {
+	case returnedDirs = <-doneChan:
+	case returnedError = <-errChan:
+	}
+
+	return returnedDirs, returnedError
+}
+
+// LsDirSimple performs a LIST on the given directory in a synchronous mode.
+func (f *Conn) LsDirSimple(mode Mode, dir string) ([]string, error) {
+	doneChan := make(chan []string, 1)
+	errChan := make(chan error, 1)
+	f.internalLs(mode, dir, doneChan, errChan)
+
+	var returnedError error
+	var returnedDirs []string
+	select {
+	case returnedDirs = <-doneChan:
+	case returnedError = <-errChan:
+	}
+
+	return returnedDirs, returnedError
+}
+
 // Ls performs a LIST on the current directory.
 // The result is written on doneChan, one row per item. Eventual errors will be
 // written on errChan, causing the function to immediately exit.
