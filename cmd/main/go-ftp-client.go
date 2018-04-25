@@ -190,7 +190,9 @@ func main() {
 			doneChan := doneChanStruct
 			// var doneChan interface{}
 			if cmd.cmd == ls {
-				dirs, err := cmd.apply(conn, true)
+				// dirs declared to prevent err to be shadowed.
+				var dirs interface{}
+				dirs, err = cmd.apply(conn, true)
 				if err != nil {
 					shell.printError(err.Error(), false)
 				} else {
@@ -203,11 +205,32 @@ func main() {
 
 				onEachChan := make(chan struct{}, 1)
 
-				// issuing a size
-				_, size, err := conn.Size(cmd.args[0])
-				if err != nil {
-					shell.printError(err.Error(), false)
-					continue
+				// issuing a remote size only if download
+				var size int
+				if cmd.cmd == get {
+					_, size, err = conn.Size(cmd.args[0])
+					if err != nil {
+						shell.printError(err.Error(), false)
+						continue
+					}
+				} else {
+					// if it is a put we get the size from the
+					// local file.
+					var file *os.File
+					var info os.FileInfo
+					file, err = os.Open(cmd.args[0])
+					if err != nil {
+						shell.printError(err.Error(), false)
+					}
+					info, err = file.Stat()
+					if err != nil {
+						shell.printError(err.Error(), false)
+					}
+					size = int(info.Size())
+					err = file.Close()
+					if err != nil {
+						shell.printError(err.Error(), false)
+					}
 				}
 
 				var pb *pb.ProgressBar
