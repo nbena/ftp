@@ -171,14 +171,14 @@ func main() {
 			helpCmd := strings.Split(line, " ")
 			if len(helpCmd) == 1 {
 				for key, value := range helpMap {
-					shell.print(key + ":\t\t" + value)
+					shell.print(key + ":\t\t\t" + value.String(false) + "\n")
 				}
 			} else {
 				helpMsg, ok := helpMap[helpCmd[1]]
 				if !ok {
-					shell.print(unrecognizedCmd)
+					shell.print(unrecognizedCmd + "\n")
 				} else {
-					shell.print(helpMsg)
+					shell.print(helpMsg.String(true) + "\n")
 				}
 			}
 		} else {
@@ -223,13 +223,10 @@ func main() {
 					onEachChan = nil
 				}
 
-				// doneChan = doneChanStruct
-				/*_, err = */
 				cmd.apply(conn, false, doneChanStruct, errChan, abortChan,
 					startingChan,
 					onEachChan)
 
-				// if err != nil {
 				<-startingChan
 
 				if asyncDownload {
@@ -239,24 +236,17 @@ func main() {
 						shell.print("\n")
 						shell.print(fmt.Sprintf("Operation %s on %v finished\n", cmd.cmd, cmd.args))
 						shell.prompt(location)
-						// shell.print("\n")
-						// shell.flush()
 						prompt = false
-						// skipNextScanLine = true
 						lockSkipNextScanLine.Unlock()
 					}()
-					// asyncDownload == false
 				} else {
 					for _ = range onEachChan {
 						pb.Increment()
 					}
 					<-doneChanStruct
 					pb.Finish()
-					// shell.print("")
 					pb.FinishPrint("Operation completed")
 				}
-
-				// continue
 
 			} else {
 				gotResponse, err = cmd.apply(conn, true, doneChan, errChan, abortChan, startingChan)

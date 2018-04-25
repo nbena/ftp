@@ -66,24 +66,67 @@ var (
 
 	unrecognizedCmd = "unrecognized command, type 'help' to view a list of available commands, or 'help <cmd>' for specific help"
 
-	helpMap = map[string]string{
-		authSSL: authSSLHelp,
-		authTLS: authTLSHelp,
-		quit:    quitHelp,
-		noop:    noopHelp,
-		pwd:     pwdHelp,
-		info:    infoHelp,
-		ls:      lsHelp,
-		mkdir:   mkdirHelp,
-		mv:      mvHelp,
-		put:     putHelp,
-		get:     getHelp,
-		rm:      rmHelp,
-		help:    helpHelp,
-		setMode: setModeHelp,
-		getMode: getModeHelp,
+	// helpMap = map[string]string{
+	// 	authSSL: authSSLHelp,
+	// 	authTLS: authTLSHelp,
+	// 	quit:    quitHelp,
+	// 	noop:    noopHelp,
+	// 	pwd:     pwdHelp,
+	// 	info:    infoHelp,
+	// 	ls:      lsHelp,
+	// 	mkdir:   mkdirHelp,
+	// 	mv:      mvHelp,
+	// 	put:     putHelp,
+	// 	get:     getHelp,
+	// 	rm:      rmHelp,
+	// 	help:    helpHelp,
+	// 	setMode: setModeHelp,
+	// 	getMode: getModeHelp,
+	// }
+
+	helpMap = map[string]*helpEntry{
+		authSSL: &helpEntry{
+			help:   authSSLHelp,
+			isLong: true,
+		},
+		authTLS: &helpEntry{
+			help:   authSSLHelp,
+			isLong: true,
+		},
+		quit: &helpEntry{
+			help:   quitHelp,
+			isLong: false,
+		},
+		noop:    &helpEntry{help: noopHelp, isLong: false},
+		pwd:     &helpEntry{help: pwdHelp, isLong: false},
+		info:    &helpEntry{help: infoHelp, isLong: false},
+		ls:      &helpEntry{help: lsHelp, isLong: false},
+		mkdir:   &helpEntry{help: mkdirHelp, isLong: false},
+		mv:      &helpEntry{help: mvHelp, isLong: false},
+		put:     &helpEntry{help: putHelp, isLong: false},
+		get:     &helpEntry{help: getHelp, isLong: false},
+		rm:      &helpEntry{help: rmHelp, isLong: false},
+		help:    &helpEntry{help: helpHelp, isLong: false},
+		setMode: &helpEntry{help: setModeHelp, isLong: true},
+		getMode: &helpEntry{help: getModeHelp, isLong: true},
 	}
 )
+
+type helpEntry struct {
+	help   string
+	isLong bool
+}
+
+func (e *helpEntry) String(skipTabs bool) string {
+	defaultTab := "\t\t\t"
+	if e.isLong {
+		defaultTab = "\t\t"
+	}
+	if skipTabs {
+		defaultTab = ""
+	}
+	return defaultTab + e.help
+}
 
 type ftpFunction func(...interface{}) (*ftp.Response, error)
 
@@ -470,23 +513,31 @@ var (
 		n:        0,
 	}
 
-	commandsTable map[string]cmd
+	// commandsTable map[string]cmd
+	// longCommands  []string
 )
 
-func init() {
-	commandsTable = make(map[string]cmd)
-	commandsTable[commandAuthTLS.cmd] = commandAuthTLS
-	commandsTable[commandAuthSSL.cmd] = commandAuthSSL
-	commandsTable[commandAbort.cmd] = commandAbort
-	commandsTable[commandCd.cmd] = commandCd
-	commandsTable[commandRm.cmd] = commandRm
-	commandsTable[commandFileInfo.cmd] = commandFileInfo
-	commandsTable[commandLs.cmd] = commandLs
-	commandsTable[commandGet.cmd] = commandGet
-	commandsTable[commandPut.cmd] = commandPut
-	commandsTable[commandPwd.cmd] = commandPwd
-	commandsTable[commandQuit.cmd] = commandQuit
-	commandsTable[commandMkdir.cmd] = commandMkdir
-	commandsTable[commandNoop.cmd] = commandNoop
-	commandsTable[commandRename.cmd] = commandRename
-}
+// func init() {
+// 	commandsTable = make(map[string]cmd)
+// 	commandsTable[commandAuthTLS.cmd] = commandAuthTLS
+// 	commandsTable[commandAuthSSL.cmd] = commandAuthSSL
+// 	commandsTable[commandAbort.cmd] = commandAbort
+// 	commandsTable[commandCd.cmd] = commandCd
+// 	commandsTable[commandRm.cmd] = commandRm
+// 	commandsTable[commandFileInfo.cmd] = commandFileInfo
+// 	commandsTable[commandLs.cmd] = commandLs
+// 	commandsTable[commandGet.cmd] = commandGet
+// 	commandsTable[commandPut.cmd] = commandPut
+// 	commandsTable[commandPwd.cmd] = commandPwd
+// 	commandsTable[commandQuit.cmd] = commandQuit
+// 	commandsTable[commandMkdir.cmd] = commandMkdir
+// 	commandsTable[commandNoop.cmd] = commandNoop
+// 	commandsTable[commandRename.cmd] = commandRename
+//
+// 	longCommands = []string{
+// 		commandAuthSSL.cmd,
+// 		commandAuthTLS.cmd,
+// 		commandSetMode.cmd,
+// 		commandGetMode.cmd,
+//	}
+// }
