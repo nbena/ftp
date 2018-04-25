@@ -123,25 +123,6 @@ func TestParsePasvOk(t *testing.T) {
 	}
 }
 
-// func internalTestFileContent(t *testing,
-// 	expectedContent []byte,
-// 	expectedFileName string,
-// 	file *os.File){
-// 	expectedFile, err := os.Create(name)
-//
-// }
-
-// func internalFileOpsSimple(t *testing.T, mode Mode){
-// 	ftpConn, _, err := authenticatedConn()
-//
-// 	if err != nil {
-// 		t.Fatalf("Conn error: %s", err.Error())
-// 	}
-//
-// 	defer ftpConn.Quit()
-//
-// }
-
 func internalFilesOps(t *testing.T, mode Mode, useSimple bool) {
 	ftpConn, _, err := authenticatedConn()
 
@@ -586,114 +567,11 @@ func internalStoreAbort(t *testing.T, beforeOrAfter bool) {
 }
 
 func TestStoreAbortBefore(t *testing.T) {
-
 	internalStoreAbort(t, true)
-
-	// ftpConn, _, err := authenticatedConn()
-	//
-	// if err != nil {
-	// 	t.Fatalf("Conn error: %s", err.Error())
-	// }
-	//
-	// defer ftpConn.Quit()
-	//
-	// fileContent := []byte("hello this is an example")
-	// file, err := os.Create("tmp.txt")
-	// defer os.Remove("tmp.txt")
-	//
-	// if err != nil {
-	// 	t.Errorf(err.Error())
-	// 	return
-	// }
-	// _, err = file.Write(fileContent)
-	// if err != nil {
-	// 	t.Errorf(err.Error())
-	// 	return
-	// }
-	//
-	// doneChanStore := make(chan struct{}, 1)
-	// abortChanStore := make(chan struct{}, 1)
-	// startingChanStore := make(chan struct{}, 1)
-	// errChanStore := make(chan error, 2)
-	//
-	// // writing immediately to
-	// // abortChanStore to be sure
-	// // that the function will abort immediately,
-	// // if not, because of the short file
-	// // dimension, one sending will be enough and
-	// // the function will never really use the abort.
-	// abortChanStore <- struct{}{}
-	//
-	// go ftpConn.Store(ActiveMode, "tmp.txt", "tmp.txt", doneChanStore, abortChanStore,
-	// 	startingChanStore, errChanStore, true)
-	//
-	// select {
-	// case err = <-errChanStore:
-	// 	t.Errorf("Got store error: %s", err.Error())
-	// 	return
-	// case <-doneChanStore:
-	// 	// checking that the file has been deleted.
-	// 	doneChanLs := make(chan []string, 1)
-	// 	errChanLs := make(chan error, 1)
-	// 	ftpConn.Ls(ActiveMode, doneChanLs, errChanLs)
-	// 	select {
-	// 	case err = <-errChanLs:
-	// 		t.Errorf("Got LS error: %s", err.Error())
-	// 		return
-	// 	case ls := <-doneChanLs:
-	// 		for _, entry := range ls {
-	// 			if strings.Contains(entry, "tmp.txt") {
-	// 				t.Errorf("Found file: %s", entry)
-	// 				return
-	// 			}
-	// 		}
-	// 	}
-	// }
 }
 
 func TestStoreAbortAfter(t *testing.T) {
-
 	internalStoreAbort(t, false)
-
-	// 	ftpConn, _, err := authenticatedConn()
-	//
-	// 	if err != nil {
-	// 		t.Fatalf("Conn error: %s", err.Error())
-	// 	}
-	//
-	// 	defer ftpConn.Quit()
-	//
-	// 	fileContent := []byte("hello this is an example")
-	// 	file, err := os.Create("tmp.txt")
-	// 	defer os.Remove("tmp.txt")
-	//
-	// 	if err != nil {
-	// 		t.Errorf(err.Error())
-	// 		return
-	// 	}
-	// 	_, err = file.Write(fileContent)
-	// 	if err != nil {
-	// 		t.Errorf(err.Error())
-	// 		return
-	// 	}
-	//
-	// 	doneChanStore := make(chan struct{}, 1)
-	// 	abortChanStore := make(chan struct{}, 1)
-	// 	startingChanStore := make(chan struct{}, 1)
-	// 	errChanStore := make(chan error, 1)
-	//
-	// 	go ftpConn.Store(ActiveMode, "tmp.txt", "tmp.txt", doneChanStore, abortChanStore,
-	// 		startingChanStore, errChanStore, false)
-	//
-	// 	select {
-	// 	case err = <-errChanStore:
-	// 		t.Errorf("Got store error: %s", err.Error())
-	// 		return
-	// 	case <-doneChanStore:
-	// 		// t.Logf("Transfer completed, now aborting")
-	// 		abortChanStore <- struct{}{}
-	// 	}
-	// }
 }
 
 func internalRetrAbort(t *testing.T, beforeOrAfter bool) {
@@ -771,139 +649,10 @@ func internalRetrAbort(t *testing.T, beforeOrAfter bool) {
 
 func TestRetrAbortBefore(t *testing.T) {
 	internalRetrAbort(t, true)
-	// ftpConn, _, err := authenticatedConn()
-	//
-	// if err != nil {
-	// 	t.Fatalf("Conn error: %s", err.Error())
-	// }
-	//
-	// defer ftpConn.Quit()
-	//
-	// fileContent := []byte("hello this is an example")
-	// file, err := os.Create("tmp.txt")
-	// if err != nil {
-	// 	t.Errorf(err.Error())
-	// 	return
-	// }
-	//
-	// defer os.Remove("tmp.txt")
-	//
-	// _, err = file.Write(fileContent)
-	// if err != nil {
-	// 	t.Errorf(err.Error())
-	// 	return
-	// }
-	//
-	// doneChanStore := make(chan struct{}, 1)
-	// abortChanStore := make(chan struct{}, 1)
-	// startingChanStore := make(chan struct{}, 1)
-	// errChanStore := make(chan error, 1)
-	//
-	// go ftpConn.Store(ActiveMode, "tmp.txt", "tmp.txt", doneChanStore, abortChanStore,
-	// 	startingChanStore, errChanStore, false)
-	//
-	// select {
-	// case err = <-errChanStore:
-	// 	t.Errorf("Got store error: %s", err.Error())
-	// 	return
-	// case <-doneChanStore:
-	// }
-	//
-	// doneChanRetr := make(chan struct{}, 1)
-	// abortChanRetr := make(chan struct{}, 1)
-	// startingChanRetr := make(chan struct{}, 1)
-	// errChanRetr := make(chan error, 1)
-	//
-	// abortChanRetr <- struct{}{}
-	// go ftpConn.Retrieve(ActiveMode, "tmp.txt", "temp.txt", doneChanRetr,
-	// 	abortChanRetr, startingChanRetr, errChanRetr)
-	//
-	// select {
-	// case err = <-errChanRetr:
-	// 	t.Errorf("Got retr error: %s", err.Error())
-	// 	return
-	// case <-doneChanRetr:
-	// 	// checking that the file has been deleted.
-	//
-	// 	_, err := os.Open("temp.txt")
-	// 	if !os.IsNotExist(err) {
-	// 		t.Errorf("The file exists?: %s", err.Error())
-	// 		return
-	// 	}
-	// }
 }
 
 func TestRetrAbortAfter(t *testing.T) {
 	internalRetrAbort(t, false)
-	// ftpConn, _, err := authenticatedConn()
-	//
-	// if err != nil {
-	// 	t.Fatalf("Conn error: %s", err.Error())
-	// }
-	//
-	// defer ftpConn.Quit()
-	//
-	// fileContent := []byte("hello this is an example")
-	// file, err := os.Create("tmp.txt")
-	// if err != nil {
-	// 	t.Errorf(err.Error())
-	// 	return
-	// }
-	//
-	// defer os.Remove("tmp.txt")
-	//
-	// _, err = file.Write(fileContent)
-	// if err != nil {
-	// 	t.Errorf(err.Error())
-	// 	return
-	// }
-	//
-	// doneChanStore := make(chan struct{}, 1)
-	// abortChanStore := make(chan struct{}, 1)
-	// startingChanStore := make(chan struct{}, 1)
-	// errChanStore := make(chan error, 1)
-	//
-	// go ftpConn.Store(ActiveMode, "tmp.txt", "tmp.txt", doneChanStore, abortChanStore,
-	// 	startingChanStore, errChanStore, false)
-	//
-	// select {
-	// case err = <-errChanStore:
-	// 	t.Errorf("Got store error: %s", err.Error())
-	// 	return
-	// case <-doneChanStore:
-	// }
-	//
-	// doneChanRetr := make(chan struct{}, 1)
-	// abortChanRetr := make(chan struct{}, 1)
-	// startingChanRetr := make(chan struct{}, 1)
-	// errChanRetr := make(chan error, 1)
-	//
-	// go ftpConn.Retrieve(ActiveMode, "tmp.txt", "temp.txt", doneChanRetr,
-	// 	abortChanRetr, startingChanRetr, errChanRetr)
-	//
-	// select {
-	// case err = <-errChanRetr:
-	// 	t.Errorf("Got retr error: %s", err.Error())
-	// 	return
-	// case <-doneChanRetr:
-	// 	// checking that the file has been locally deleted
-	// 	// here have no sense, because the function immediately
-	// 	// exit after everything had been done.
-	// 	abortChanRetr <- struct{}{}
-	//
-	// 	// 	_, err := os.Open("temp.txt")
-	// 	// 	if err != nil {
-	// 	// 		if !os.IsNotExist(err) {
-	// 	// 			t.Errorf("The file exists?: %s", err.Error())
-	// 	// 			return
-	// 	// 		}
-	// 	// 		t.Logf("File has been correctly deleted")
-	// 	// 	} else {
-	// 	// 		t.Errorf("File hasn't been deleted!")
-	// 	// 	}
-	// 	// }
-	// 	os.Remove("temp.txt")
-	// }
 }
 
 func TestParseTimeNoop(t *testing.T) {
@@ -1009,7 +758,6 @@ func TestAuthTLS(t *testing.T) {
 	} else {
 		ftpConn.Quit()
 	}
-
 	// even if handshake error is expected, it's still an error
 	// so we can defer ONLY IF NO ERROR HAS HAPPENED.
 	// if err == nil {
@@ -1017,5 +765,20 @@ func TestAuthTLS(t *testing.T) {
 	// 	// and defer is not really needed.
 	// 	defer ftpConn1.Quit()
 	// }
+}
 
+func TestBufferSize(t *testing.T) {
+
+	ftpConn, _, err := authenticatedConn()
+	if err != nil {
+		t.Errorf(err.Error())
+		return
+	}
+
+	defer ftpConn.Quit()
+
+	buffer := ftpConn.BufferSize()
+	if buffer != bufferSize {
+		t.Errorf("Expected buffer size of %d, got %d", bufferSize, buffer)
+	}
 }

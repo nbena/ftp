@@ -126,6 +126,8 @@ const (
 
 	// DefaultModeStr is a 'no-matters' FTP mode.
 	DefaultModeStr = "default"
+
+	bufferSize = 1024
 )
 
 // UnexpectedCodeError is the type that repesents an error that
@@ -220,6 +222,7 @@ type Conn struct {
 	lastUsedPort int
 	portLock     sync.Mutex
 	// rand   *rand.Rand
+	bufferSize int
 }
 
 // SetDefaultMode sets the FTP mode to be used for the next requests.
@@ -288,4 +291,10 @@ func (r *Response) Error() string {
 
 func (r *Response) String() string {
 	return strconv.Itoa(r.Code) + ": " + r.Msg
+}
+
+// BufferSize returns the buffer size used when down/up-loading files,
+// which is 1024 bytes.
+func (f *Conn) BufferSize() int {
+	return bufferSize
 }

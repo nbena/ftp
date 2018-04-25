@@ -338,8 +338,9 @@ func internalDial(remote string, config *Config) (*Conn, *Response, error) {
 	}
 
 	ftpConn := &Conn{
-		control: conn,
-		config:  config,
+		control:    conn,
+		config:     config,
+		bufferSize: bufferSize,
 	}
 	reader, writer := bufio.NewReader(conn), bufio.NewWriter(conn)
 	ftpConn.controlRw = bufio.NewReadWriter(reader, writer)
@@ -491,7 +492,7 @@ func (f *Conn) internalLs(mode Mode, filepath string, doneChan chan<- []string, 
 		}
 	}
 
-	buffer := make([]byte, 1024)
+	buffer := make([]byte, f.bufferSize)
 	var result []string
 
 	for {
@@ -671,7 +672,7 @@ func (f *Conn) internalStore(
 		return
 	}
 
-	buffer := make([]byte, 1024)
+	buffer := make([]byte, f.bufferSize)
 
 	// command has been issued, notifying on startingChan
 	startingChan <- struct{}{}
@@ -759,6 +760,9 @@ func (f *Conn) internalStore(
 	}
 
 	doneChan <- struct{}{}
+	if onEachChan != nil {
+		close(onEachChan)
+	}
 }
 
 // Retrieve download a file located at filepathSrc to filepathDest.
@@ -830,7 +834,7 @@ func (f *Conn) internalRetr(mode Mode,
 	}
 
 	// starting reading into receiver
-	buffer := make([]byte, 1024)
+	buffer := make([]byte, f.bufferSize)
 	loop := true
 
 	// command has been issued, notify on startingChan

@@ -236,13 +236,22 @@ func main() {
 						lockSkipNextScanLine.Unlock()
 					}()
 				} else {
-
+					last := 0
 					for _ = range onEachChan {
-						pb.Increment()
+						// pb.Increment()
+						last += conn.BufferSize()
+						set := last
+						if last > size {
+							set = size
+						}
+
+						pb.Set(set)
 					}
 					<-doneChanStruct
+
+					pb.Set(size)
 					pb.Finish()
-					pb.FinishPrint("Operation completed")
+					pb.FinishPrint(fmt.Sprintf("Operation %s on %v finished\n", cmd.cmd, cmd.args))
 				}
 
 			} else {
@@ -254,11 +263,11 @@ func main() {
 				if gotResponse != nil {
 					switch gotResponse.(type) {
 					case string:
-						shell.print(gotResponse.(string))
+						shell.print(gotResponse.(string) + "\n")
 					case []interface{}:
-						shell.print(gotResponse.([]interface{})[0].(string))
+						shell.print(gotResponse.([]interface{})[0].(string) + "\n")
 					case *ftp.Response:
-						shell.print(gotResponse.(*ftp.Response).String())
+						shell.print(gotResponse.(*ftp.Response).String() + "\n")
 						// shell.print(response.String())
 					}
 				}
