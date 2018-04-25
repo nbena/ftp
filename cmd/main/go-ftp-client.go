@@ -190,18 +190,6 @@ func main() {
 			doneChan := doneChanStruct
 			// var doneChan interface{}
 			if cmd.cmd == ls {
-				// /*_, err = */ cmd.apply(conn, false, doneChanStr, errChan, abortChan, startingChan)
-				//
-				// select {
-				// case <-errChan:
-				// 	shell.printError(err.Error(), false)
-				//
-				// case dirs := <-doneChanStr:
-				// 	for _, dir := range dirs {
-				// 		shell.print(dir)
-				// 	}
-				// }
-				// continue
 				dirs, err := cmd.apply(conn, true)
 				if err != nil {
 					shell.printError(err.Error(), false)
@@ -248,6 +236,7 @@ func main() {
 						lockSkipNextScanLine.Unlock()
 					}()
 				} else {
+
 					for _ = range onEachChan {
 						pb.Increment()
 					}

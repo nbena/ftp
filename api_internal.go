@@ -925,4 +925,7 @@ func (f *Conn) internalRetr(mode Mode,
 	}
 
 	doneChan <- struct{}{}
+	if onEachChan != nil {
+		close(onEachChan)
+	}
 }
