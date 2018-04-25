@@ -105,6 +105,12 @@ func parseFlags() {
 			// if a quit is not provided we add by ourselves(?) the command
 			commandsArray = append(commandsArray, quit)
 		}
+		// fmt.Println(len(commandsArray))
+		for _, v := range commandsArray {
+			v = strings.TrimSpace(v)
+			// fmt.Printf("'%s'\n", v)
+		}
+		asyncDownload = false
 	}
 
 	splittedIP := strings.Split(localIP, ":")

@@ -143,6 +143,8 @@ func main() {
 			line = commandsArray[currentCommandsIndex]
 		}
 
+		line = strings.TrimSpace(line)
+
 		if strings.HasPrefix(line, "Operation ") ||
 			strings.HasPrefix(line, "\nOperation") ||
 			strings.HasPrefix(line, "\n") ||
@@ -150,14 +152,17 @@ func main() {
 			if prompt == false {
 				prompt = true
 			}
+			if !interactiveMode {
+				currentCommandsIndex++
+			}
 			continue
 		}
 
-		currentCommandsIndex++
-		if currentCommandsIndex == len(commandsArray)-1 {
+		if currentCommandsIndex == len(commandsArray)-1 && !interactiveMode {
 			loop = false
 			// next iteration we'll exit.
 		}
+		currentCommandsIndex++
 
 		if line == quit {
 			if _, err := conn.Quit(); err != nil {
