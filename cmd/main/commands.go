@@ -321,6 +321,8 @@ func parseOneArg(first, second string) (*cmd, error) {
 		command = commandMkdir
 	case ls:
 		command = commandLs
+	case rm:
+		command = commandRm
 	case setMode:
 		command = commandSetMode
 	default:
@@ -338,8 +340,8 @@ func parseTwoArg(first, second, third string) (*cmd, error) {
 	switch first {
 	case mv:
 		command = commandRename
-	case rm:
-		command = commandRm
+	// case rm:
+	// 	command = commandRm
 	case get:
 		command = commandGet
 	case put:
@@ -455,7 +457,7 @@ var (
 	commandRm = cmd{
 		cmd:      "rm",
 		required: true,
-		n:        -1,
+		n:        1,
 	}
 	commandLastMod = cmd{
 		cmd:      "last-mod",
