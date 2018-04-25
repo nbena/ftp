@@ -94,7 +94,7 @@ func main() {
 
 	loop := true
 
-	doneChanStr := make(chan []string, 10)
+	// doneChanStr := make(chan []string, 10)
 	doneChanStruct := make(chan struct{}, 10)
 	errChan := make(chan error, 10)
 	abortChan := make(chan struct{}, 10)
@@ -190,18 +190,26 @@ func main() {
 			doneChan := doneChanStruct
 			// var doneChan interface{}
 			if cmd.cmd == ls {
-				/*_, err = */ cmd.apply(conn, false, doneChanStr, errChan, abortChan, startingChan)
-
-				select {
-				case <-errChan:
+				// /*_, err = */ cmd.apply(conn, false, doneChanStr, errChan, abortChan, startingChan)
+				//
+				// select {
+				// case <-errChan:
+				// 	shell.printError(err.Error(), false)
+				//
+				// case dirs := <-doneChanStr:
+				// 	for _, dir := range dirs {
+				// 		shell.print(dir)
+				// 	}
+				// }
+				// continue
+				dirs, err := cmd.apply(conn, true)
+				if err != nil {
 					shell.printError(err.Error(), false)
-
-				case dirs := <-doneChanStr:
-					for _, dir := range dirs {
+				} else {
+					for _, dir := range dirs.([]string) {
 						shell.print(dir)
 					}
 				}
-				continue
 
 			} else if cmd.cmd == put || cmd.cmd == get {
 

@@ -198,16 +198,21 @@ func (c *cmd) apply(
 		}
 		return returnedArray, nil
 	case ls:
-		doneChan := args[0].(chan []string)
-		errChan := args[1].(chan error)
+		// doneChan := args[0].(chan []string)
+		// errChan := args[1].(chan error)
+		var dirs []string
+		var err error
 		if len(c.args) == 0 {
-			ftpConn.Ls(ftp.IndMode, doneChan, errChan)
+			// ftpConn.Ls(ftp.IndMode, doneChan, errChan)
+			dirs, err = ftpConn.LsSimple(ftp.IndMode)
 		} else {
-			ftpConn.LsDir(ftp.IndMode, c.args[0], doneChan, errChan)
+			// ftpConn.LsDir(ftp.IndMode, c.args[0], doneChan, errChan)
+			dirs, err = ftpConn.LsDirSimple(ftp.IndMode, c.args[0])
 		}
 
 		// nil, nil because returns value are in the channels.
 		// return nil, nil
+		return dirs, err
 	case mkdir:
 		return ftpConn.MkDir(c.args[0])
 
