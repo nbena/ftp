@@ -50,10 +50,24 @@ func getConn() (*ftp.Conn, *ftp.Response, error) {
 		})
 }
 
+func onError(conn *ftp.Conn, shell *shell, exitOnError bool) {
+	if exitOnError {
+		_, err := conn.Quit()
+		if err == nil {
+			shell.goodbye()
+		}
+		os.Exit(-1)
+	}
+}
+
 func main() {
 
 	parseFlags()
+
 	interactiveMode := true
+
+	// always set to true unless we are in non interactive mode
+	exitOnError := false
 
 	quitChan := make(chan os.Signal)
 	signal.Notify(quitChan, syscall.SIGINT, syscall.SIGSTOP)
@@ -76,6 +90,7 @@ func main() {
 	// }
 	if len(commandsArray) > 0 {
 		interactiveMode = false
+		exitOnError = true
 	}
 
 	shell := newShell()
@@ -199,6 +214,7 @@ func main() {
 				dirs, err = cmd.apply(conn, true)
 				if err != nil {
 					shell.printError(err.Error(), false)
+					onError(conn, shell, exitOnError)
 				} else {
 					for _, dir := range dirs.([]string) {
 						shell.print(dir)
@@ -215,6 +231,7 @@ func main() {
 					_, size, err = conn.Size(cmd.args[0])
 					if err != nil {
 						shell.printError(err.Error(), false)
+						onError(conn, shell, exitOnError)
 						continue
 					}
 				} else {
@@ -253,11 +270,26 @@ func main() {
 				<-startingChan
 
 				if asyncDownload {
+					// this is not used in non interactive sessions
+					// so we do not call onError
 					go func() {
-						<-doneChanStruct
+						completitionMessage := fmt.Sprintf("Operation %s on %v finished\n", cmd.cmd, cmd.args)
+						isError := false
+						select {
+						case <-doneChanStruct:
+							// can't use the outer variable because main
+							// thread may use it at the same time.
+						case errInside := <-errChan:
+							completitionMessage = errInside.Error()
+						}
+						// <-doneChanStruct
 						lockSkipNextScanLine.Lock()
 						shell.print("\n")
-						shell.print(fmt.Sprintf("Operation %s on %v finished\n", cmd.cmd, cmd.args))
+						if isError == false {
+							shell.print(completitionMessage)
+						} else {
+							shell.printError(completitionMessage, false)
+						}
 						shell.prompt(location)
 						prompt = false
 						lockSkipNextScanLine.Unlock()
@@ -274,17 +306,31 @@ func main() {
 
 						pb.Set(set)
 					}
-					<-doneChanStruct
+
+					var completitionMessage string
+					isError := false
+					select {
+					case <-doneChanStruct:
+						completitionMessage = fmt.Sprintf("Operation %s on %v finished\n", cmd.cmd, cmd.args)
+					case err = <-errChan:
+						completitionMessage = err.Error()
+						isError = true
+					}
+					// <-doneChanStruct
 
 					pb.Set(size)
 					pb.Finish()
-					pb.FinishPrint(fmt.Sprintf("Operation %s on %v finished\n", cmd.cmd, cmd.args))
+					pb.FinishPrint(completitionMessage)
+					if isError {
+						onError(conn, shell, exitOnError)
+					}
 				}
 
 			} else {
 				gotResponse, err = cmd.apply(conn, true, doneChan, errChan, abortChan, startingChan)
 				if err != nil {
 					shell.printError(err.Error(), false)
+					onError(conn, shell, exitOnError)
 					continue
 				}
 				if gotResponse != nil {

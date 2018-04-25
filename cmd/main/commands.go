@@ -57,32 +57,14 @@ var (
 	lsHelp      = "ls [directory] ls on [directory] or current directory"
 	mkdirHelp   = "mkdir <directory> create a directory"
 	mvHelp      = "mv <from> <to>"
-	putHelp     = "put <llocal-file> <remote-destination> upload <local-file> to server using <remote-destination>"
+	putHelp     = "put <local-file> <remote-destination> upload <local-file> to server using <remote-destination>"
 	getHelp     = "get <remote-file> <local-destination> download <remote-file> to <local-destination>"
-	rmHelp      = "rm <file1>[filen][directoryn] delete remote files/directories"
+	rmHelp      = "rm <file> delete remote file/directory"
 	setModeHelp = "set-mode active|passive sets the mode to use for the next transfers"
 	getModeHelp = "get-mode shows the current use FTP mode"
-	helpHelp    = ""
+	helpHelp    = "show this message"
 
 	unrecognizedCmd = "unrecognized command, type 'help' to view a list of available commands, or 'help <cmd>' for specific help"
-
-	// helpMap = map[string]string{
-	// 	authSSL: authSSLHelp,
-	// 	authTLS: authTLSHelp,
-	// 	quit:    quitHelp,
-	// 	noop:    noopHelp,
-	// 	pwd:     pwdHelp,
-	// 	info:    infoHelp,
-	// 	ls:      lsHelp,
-	// 	mkdir:   mkdirHelp,
-	// 	mv:      mvHelp,
-	// 	put:     putHelp,
-	// 	get:     getHelp,
-	// 	rm:      rmHelp,
-	// 	help:    helpHelp,
-	// 	setMode: setModeHelp,
-	// 	getMode: getModeHelp,
-	// }
 
 	helpMap = map[string]*helpEntry{
 		authSSL: &helpEntry{
@@ -129,14 +111,14 @@ func (e *helpEntry) String(skipTabs bool) string {
 	return defaultTab + e.help
 }
 
-type ftpFunction func(...interface{}) (*ftp.Response, error)
+// type ftpFunction func(...interface{}) (*ftp.Response, error)
 
 type cmd struct {
 	cmd      string
 	args     []string
 	required bool
 	n        int
-	function ftpFunction
+	// function ftpFunction
 }
 
 func (c *cmd) apply(
@@ -305,7 +287,7 @@ func parseZeroArg(s string) (*cmd, error) {
 	case getMode:
 		command = commandGetMode
 	default:
-		err = fmt.Errorf("Unknown command: %s", s)
+		err = fmt.Errorf("Unknown command or wrong parameters: %s", s)
 	}
 	return &command, err
 }
@@ -327,7 +309,7 @@ func parseOneArg(first, second string) (*cmd, error) {
 	case setMode:
 		command = commandSetMode
 	default:
-		err = fmt.Errorf("Unknown command: %s", first)
+		err = fmt.Errorf("Unknown command or wrong parameters: %s", first)
 	}
 	if err == nil {
 		command.args = []string{second}
@@ -348,7 +330,7 @@ func parseTwoArg(first, second, third string) (*cmd, error) {
 	case put:
 		command = commandPut
 	default:
-		err = fmt.Errorf("Unknown command: %s", first)
+		err = fmt.Errorf("Unknown command or wrong parameters: %s", first)
 	}
 	if err == nil {
 		command.args = []string{second, third}
@@ -399,7 +381,7 @@ func parse(s string) (*cmd, error) {
 		// } else {
 		// 	cmd, err = parseNArg(parsed[0], parsed[1:])
 		// }
-		err = fmt.Errorf("Unknown command: %s", s)
+		err = fmt.Errorf("Unknown command or wrong parameters: %s", s)
 	}
 	if err != nil {
 		return nil, err
