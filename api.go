@@ -230,6 +230,11 @@ type Conn struct {
 	// rand   *rand.Rand
 	bufferSize int
 
+	// These two are used to implement graceful shudtown.
+	// When we a used calls quit, the cancel function is called,
+	// causing the internal context's channel to send a value,
+	// and functions that internally uses abortChannels basically listen
+	// on ctx.Done() too.
 	ctx    context.Context
 	cancel context.CancelFunc
 }

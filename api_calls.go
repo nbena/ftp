@@ -65,8 +65,11 @@ func (f *Conn) Authenticate() (*Response, error) {
 	return unexpectedErrorOrResponse(LoginOk, response)
 }
 
-//Quit close the current FTP session, it means that every transfer in progress
-//is closed too.
+// Quit close the current FTP session. Every transfer in progress will be
+// aborted, if we do not use this method, we can send a QUIT but unless
+// the transfer is finished, the server does not listen for that QUIT.
+// If you are hurry and just want to exit, just exit and don't call this
+// function. :-)
 func (f *Conn) Quit() (*Response, error) {
 	f.cancel()
 	// file, _ := os.Create("fileeeee")
