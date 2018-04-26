@@ -68,8 +68,13 @@ func (f *Conn) Authenticate() (*Response, error) {
 //Quit close the current FTP session, it means that every transfer in progress
 //is closed too.
 func (f *Conn) Quit() (*Response, error) {
+	f.cancel()
+	// file, _ := os.Create("fileeeee")
+	// file.WriteString("you called me!\n")
 	response, err := f.writeCommandAndGetResponse("QUIT\r\n")
+	// file.WriteString("writeen\n")
 	if err != nil {
+		// file.WriteString(err.Error())
 		return nil, err
 	}
 	if response.Code != QuitOk {
@@ -323,7 +328,7 @@ func (f *Conn) StoreSimple(
 	errChan := make(chan error, 1)
 
 	f.internalStore(mode, src, dst, doneChan, abortChan, startingChan,
-		errChan, nil, false)
+		errChan, nil, false, 0)
 
 	var returned error
 
@@ -348,7 +353,7 @@ func (f *Conn) RetrSimple(
 	startingChan := make(chan struct{}, 1)
 	errChan := make(chan error, 1)
 
-	f.internalRetr(mode, src, dst, doneChan, abortChan, startingChan, errChan, nil)
+	f.internalRetr(mode, src, dst, doneChan, abortChan, startingChan, errChan, nil, 0)
 
 	var returned error
 
@@ -379,11 +384,12 @@ func (f *Conn) Store(
 	src string,
 	dst string,
 	doneChan chan<- struct{},
-	abortChan <-chan struct{},
+	abortChan chan struct{},
 	startingChan chan<- struct{},
 	errChan chan<- error,
-	onEachChan chan<- struct{},
+	onEachChan chan<- int,
 	deleteIfAbort bool,
+	bufferSize int,
 ) {
 
 	/*
@@ -419,7 +425,9 @@ func (f *Conn) Store(
 		startingChan,
 		errChan,
 		onEachChan,
-		deleteIfAbort)
+		deleteIfAbort,
+		bufferSize,
+	)
 }
 
 // Retrieve download a file located at filepathSrc to filepathDest.
@@ -429,10 +437,11 @@ func (f *Conn) Retrieve(mode Mode,
 	filepathSrc,
 	filepathDest string,
 	doneChan chan<- struct{},
-	abortChan <-chan struct{},
+	abortChan chan struct{},
 	startingChan chan<- struct{},
 	errChan chan<- error,
-	onEachChan chan<- struct{},
+	onEachChan chan<- int,
+	bufferSize int,
 ) {
 
 	f.internalRetr(mode,
@@ -443,5 +452,6 @@ func (f *Conn) Retrieve(mode Mode,
 		startingChan,
 		errChan,
 		onEachChan,
+		bufferSize,
 	)
 }

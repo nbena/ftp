@@ -19,6 +19,7 @@ package ftp
 
 import (
 	"bufio"
+	"context"
 	"crypto/tls"
 	"errors"
 	"fmt"
@@ -34,6 +35,11 @@ import (
 type Mode int
 
 const (
+	// MaxAllowedBufferSize is the maximum buffer size that
+	// can be set when down/uploading a file, so developers
+	// CAN'T require more then 3M of buffer
+	MaxAllowedBufferSize = 1024 * 1024 * 5
+
 	// ActiveMode means that for default the
 	// active modality will be used.
 	ActiveMode = Mode(1)
@@ -223,6 +229,9 @@ type Conn struct {
 	portLock     sync.Mutex
 	// rand   *rand.Rand
 	bufferSize int
+
+	ctx    context.Context
+	cancel context.CancelFunc
 }
 
 // SetDefaultMode sets the FTP mode to be used for the next requests.

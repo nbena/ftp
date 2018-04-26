@@ -20,6 +20,7 @@ package ftp
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"crypto/tls"
 	"errors"
 	"fmt"
@@ -345,6 +346,8 @@ func internalDial(remote string, config *Config) (*Conn, *Response, error) {
 	reader, writer := bufio.NewReader(conn), bufio.NewWriter(conn)
 	ftpConn.controlRw = bufio.NewReadWriter(reader, writer)
 
+	ftpConn.ctx, ftpConn.cancel = context.WithCancel(context.Background())
+
 	response, err := ftpConn.getFtpResponse()
 	if err != nil {
 		return nil, nil, err
@@ -576,11 +579,12 @@ func (f *Conn) internalStore(
 	src string,
 	dst string,
 	doneChan chan<- struct{},
-	abortChan <-chan struct{},
+	abortChan chan struct{},
 	startingChan chan<- struct{},
 	errChan chan<- error,
-	onEachChan chan<- struct{},
+	onEachChan chan<- int,
 	deleteIfAbort bool,
+	bufferSize int,
 ) {
 
 	/*
@@ -615,6 +619,11 @@ func (f *Conn) internalStore(
 
 	if mode == IndMode {
 		mode = f.config.DefaultMode
+	}
+
+	usedBufferSize := f.bufferSize
+	if bufferSize > 0 && bufferSize <= MaxAllowedBufferSize {
+		usedBufferSize = bufferSize
 	}
 
 	if mode == ActiveMode {
@@ -672,7 +681,7 @@ func (f *Conn) internalStore(
 		return
 	}
 
-	buffer := make([]byte, f.bufferSize)
+	buffer := make([]byte, usedBufferSize)
 
 	// command has been issued, notifying on startingChan
 	startingChan <- struct{}{}
@@ -680,6 +689,8 @@ func (f *Conn) internalStore(
 	for n < int(info.Size()) {
 
 		select {
+		case <-f.ctx.Done():
+			abortChan <- struct{}{}
 		// starting polling on abort
 		case <-abortChan:
 			// it's not completely correct to close here the data channel,
@@ -687,6 +698,9 @@ func (f *Conn) internalStore(
 			sender.Close()
 			response, err := f.writeCommandAndGetResponse("ABOR\r\n")
 			if err != nil {
+				if onEachChan != nil {
+					close(onEachChan)
+				}
 				errChan <- err
 				return
 			}
@@ -703,13 +717,22 @@ func (f *Conn) internalStore(
 				abortResponse, err := f.getFtpResponse()
 				if err != nil {
 					// very bad
+					if onEachChan != nil {
+						close(onEachChan)
+					}
 					errChan <- err
 					return
 				} else if abortResponse.Code != TransferOk {
+					if onEachChan != nil {
+						close(onEachChan)
+					}
 					errChan <- newUnexpectedCodeError(TransferOk, abortResponse.Code)
 					return
 				}
 			} else {
+				if onEachChan != nil {
+					close(onEachChan)
+				}
 				errChan <- newUnexpectedCodeError(AbortOk, response.Code)
 				return
 			}
@@ -731,6 +754,9 @@ func (f *Conn) internalStore(
 			// reading from file
 			read, err := file.Read(buffer)
 			if err != nil {
+				if onEachChan != nil {
+					close(onEachChan)
+				}
 				sender.Close()
 				errChan <- err
 				return
@@ -740,12 +766,15 @@ func (f *Conn) internalStore(
 			n += read
 			_, err = sender.Write(buffer[:read])
 			if err != nil {
+				if onEachChan != nil {
+					close(onEachChan)
+				}
 				sender.Close()
 				errChan <- err
 				return
 			}
 			if onEachChan != nil {
-				onEachChan <- struct{}{}
+				onEachChan <- read
 			}
 		}
 	}
@@ -755,6 +784,9 @@ func (f *Conn) internalStore(
 
 	// when completed reading response.
 	if _, err := f.getFtpResponse(); err != nil {
+		if onEachChan != nil {
+			close(onEachChan)
+		}
 		errChan <- err
 		return
 	}
@@ -772,16 +804,22 @@ func (f *Conn) internalRetr(mode Mode,
 	filepathSrc,
 	filepathDest string,
 	doneChan chan<- struct{},
-	abortChan <-chan struct{},
+	abortChan chan struct{},
 	startingChan chan<- struct{},
 	errChan chan<- error,
-	onEachChan chan<- struct{},
+	onEachChan chan<- int,
+	bufferSize int,
 ) {
 
 	var receiver io.ReadCloser
 
 	if mode == IndMode {
 		mode = f.config.DefaultMode
+	}
+
+	usedBufferSize := f.bufferSize
+	if bufferSize > 0 && bufferSize <= MaxAllowedBufferSize {
+		usedBufferSize = bufferSize
 	}
 
 	if mode == ActiveMode {
@@ -834,7 +872,8 @@ func (f *Conn) internalRetr(mode Mode,
 	}
 
 	// starting reading into receiver
-	buffer := make([]byte, f.bufferSize)
+	buffer := make([]byte, usedBufferSize)
+
 	loop := true
 
 	// command has been issued, notify on startingChan
@@ -843,12 +882,16 @@ func (f *Conn) internalRetr(mode Mode,
 	for loop {
 
 		select {
-
+		case <-f.ctx.Done():
+			abortChan <- struct{}{}
 		case <-abortChan:
 			receiver.Close()
 			// var response *Response //declaring here just to prevent go vet.
 			response, err := f.writeCommandAndGetResponse("ABOR\r\n")
 			if err != nil {
+				if onEachChan != nil {
+					close(onEachChan)
+				}
 				errChan <- err
 
 				os.Remove(file.Name()) //skipping the error.
@@ -861,14 +904,23 @@ func (f *Conn) internalRetr(mode Mode,
 				// ok, wait for another.
 				abortResponse, err := f.getFtpResponse()
 				if err != nil {
+					if onEachChan != nil {
+						close(onEachChan)
+					}
 					// very bad
 					errChan <- err
 					return
 				} else if abortResponse.Code != TransferOk {
+					if onEachChan != nil {
+						close(onEachChan)
+					}
 					errChan <- newUnexpectedCodeError(TransferOk, abortResponse.Code)
 					return
 				}
 			} else {
+				if onEachChan != nil {
+					close(onEachChan)
+				}
 				errChan <- newUnexpectedCodeError(AbortOk, response.Code)
 				return
 			}
@@ -877,10 +929,13 @@ func (f *Conn) internalRetr(mode Mode,
 			if err != nil {
 				errChan <- err
 			} else {
-				if onEachChan != nil {
-					close(onEachChan)
-				}
+				// if onEachChan != nil {
+				// 	close(onEachChan)
+				// }
 				doneChan <- struct{}{}
+			}
+			if onEachChan != nil {
+				close(onEachChan)
 			}
 			return
 
@@ -895,24 +950,31 @@ func (f *Conn) internalRetr(mode Mode,
 				continue // before there was a break but it'll make
 				// exiting just from the select.
 			} else if err != nil {
+				if onEachChan != nil {
+					close(onEachChan)
+				}
 				receiver.Close()
 				errChan <- err
 				return
 			}
 
-			if onEachChan != nil {
-				onEachChan <- struct{}{}
-			}
-
 			// so we can skip null bytes that are added
 			/// to fill the buffer size.
+
 			index := bytes.IndexByte(buffer, 0)
 			if index == -1 {
 				index = len(buffer)
 			}
+			if onEachChan != nil {
+				// onEachChan <- struct{}{}
+				onEachChan <- index
+			}
 
 			if _, err = file.Write(buffer[:index]); err != nil {
 				// closing the connection as well
+				if onEachChan != nil {
+					close(onEachChan)
+				}
 				receiver.Close()
 				errChan <- err
 				return
@@ -924,6 +986,9 @@ func (f *Conn) internalRetr(mode Mode,
 	// it's not unreachable code...
 	_, err = f.getFtpResponse()
 	if err != nil {
+		if onEachChan != nil {
+			close(onEachChan)
+		}
 		errChan <- err
 		return
 	}

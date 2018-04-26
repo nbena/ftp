@@ -123,7 +123,7 @@ func TestParsePasvOk(t *testing.T) {
 	}
 }
 
-func internalFilesOps(t *testing.T, mode Mode, useSimple bool) {
+func internalFilesOps(t *testing.T, mode Mode, useSimple bool, bufferSize int) {
 	ftpConn, _, err := authenticatedConn()
 
 	if err != nil {
@@ -150,7 +150,7 @@ func internalFilesOps(t *testing.T, mode Mode, useSimple bool) {
 	abortChanStore := make(chan struct{}, 1)
 	startingChanStore := make(chan struct{}, 1)
 	errChanStore := make(chan error, 1)
-	onEachChanStore := make(chan struct{}, 10)
+	onEachChanStore := make(chan int, 10)
 
 	stat, err := file.Stat()
 	if err != nil {
@@ -162,7 +162,7 @@ func internalFilesOps(t *testing.T, mode Mode, useSimple bool) {
 
 	if useSimple == false {
 		go ftpConn.Store(mode, "tmp.txt", "tmp.txt", doneChanStore, abortChanStore,
-			startingChanStore, errChanStore, onEachChanStore, false)
+			startingChanStore, errChanStore, onEachChanStore, false, bufferSize)
 
 		loop := true
 		for loop {
@@ -191,7 +191,7 @@ func internalFilesOps(t *testing.T, mode Mode, useSimple bool) {
 	abortChanRetr := make(chan struct{}, 1)
 	startingChanRetr := make(chan struct{}, 1)
 	errChanRetr := make(chan error, 1)
-	onEachChanRetr := make(chan struct{}, 10)
+	onEachChanRetr := make(chan int, 10)
 
 	if useSimple == false {
 
@@ -201,6 +201,7 @@ func internalFilesOps(t *testing.T, mode Mode, useSimple bool) {
 			startingChanRetr,
 			errChanRetr,
 			onEachChanRetr,
+			bufferSize,
 		)
 
 		loop := true
@@ -264,19 +265,27 @@ func internalFilesOps(t *testing.T, mode Mode, useSimple bool) {
 }
 
 func TestFileOpsActiveSync(t *testing.T) {
-	internalFilesOps(t, ActiveMode, true)
+	internalFilesOps(t, ActiveMode, true, 0)
 }
 
 func TestFileOpsPassiveSync(t *testing.T) {
-	internalFilesOps(t, PassiveMode, true)
+	internalFilesOps(t, PassiveMode, true, 0)
 }
 
-func TestFileOpsActiveAsync(t *testing.T) {
-	internalFilesOps(t, ActiveMode, false)
+func TestFileOpsActiveAsyncDefaultBuffer(t *testing.T) {
+	internalFilesOps(t, ActiveMode, false, 0)
 }
 
-func TestFileOpsPassiveAsync(t *testing.T) {
-	internalFilesOps(t, PassiveMode, false)
+func TestFileOpsPassiveAsyncDefaultBuffer(t *testing.T) {
+	internalFilesOps(t, PassiveMode, false, 0)
+}
+
+func TestFileOpsActiveAsyncCustomBuffer(t *testing.T) {
+	internalFilesOps(t, ActiveMode, false, MaxAllowedBufferSize)
+}
+
+func TestFileOpsPassiveAsyncCustomBuffer(t *testing.T) {
+	internalFilesOps(t, PassiveMode, false, MaxAllowedBufferSize)
 }
 
 func internalDirOps(t *testing.T, mode Mode, useSimple bool) {
@@ -446,10 +455,10 @@ func TestRename(t *testing.T) {
 	abortChanStore := make(chan struct{}, 1)
 	startingChanStore := make(chan struct{}, 1)
 	errChanStore := make(chan error, 1)
-	onEachChanStore := make(chan struct{}, 10)
+	onEachChanStore := make(chan int, 10)
 
 	go ftpConn.Store(ActiveMode, "tmp.txt", "tmp.txt", doneChanStore, abortChanStore,
-		startingChanStore, errChanStore, onEachChanStore, false)
+		startingChanStore, errChanStore, onEachChanStore, false, 0)
 
 	loop := true
 	for loop {
@@ -523,7 +532,7 @@ func internalStoreAbort(t *testing.T, beforeOrAfter bool) {
 	abortChanStore := make(chan struct{}, 1)
 	startingChanStore := make(chan struct{}, 1)
 	errChanStore := make(chan error, 2)
-	onEachChanStore := make(chan struct{}, 10)
+	onEachChanStore := make(chan int, 10)
 
 	// writing immediately to
 	// abortChanStore to be sure
@@ -536,7 +545,7 @@ func internalStoreAbort(t *testing.T, beforeOrAfter bool) {
 	}
 
 	go ftpConn.Store(ActiveMode, "tmp.txt", "tmp.txt", doneChanStore, abortChanStore,
-		startingChanStore, errChanStore, onEachChanStore, true)
+		startingChanStore, errChanStore, onEachChanStore, true, 0)
 
 	select {
 	case err = <-errChanStore:
@@ -602,10 +611,10 @@ func internalRetrAbort(t *testing.T, beforeOrAfter bool) {
 	abortChanStore := make(chan struct{}, 1)
 	startingChanStore := make(chan struct{}, 1)
 	errChanStore := make(chan error, 1)
-	onEachChanStore := make(chan struct{}, 10)
+	onEachChanStore := make(chan int, 10)
 
 	go ftpConn.Store(ActiveMode, "tmp.txt", "tmp.txt", doneChanStore, abortChanStore,
-		startingChanStore, errChanStore, onEachChanStore, false)
+		startingChanStore, errChanStore, onEachChanStore, false, 0)
 
 	select {
 	case err = <-errChanStore:
@@ -618,14 +627,14 @@ func internalRetrAbort(t *testing.T, beforeOrAfter bool) {
 	abortChanRetr := make(chan struct{}, 1)
 	startingChanRetr := make(chan struct{}, 1)
 	errChanRetr := make(chan error, 1)
-	onEachChanRetr := make(chan struct{}, 10)
+	onEachChanRetr := make(chan int, 10)
 
 	if beforeOrAfter {
 		abortChanRetr <- struct{}{}
 	}
 
 	go ftpConn.Retrieve(ActiveMode, "tmp.txt", "temp.txt", doneChanRetr,
-		abortChanRetr, startingChanRetr, errChanRetr, onEachChanRetr)
+		abortChanRetr, startingChanRetr, errChanRetr, onEachChanRetr, 0)
 
 	select {
 	case err = <-errChanRetr:
@@ -693,10 +702,10 @@ func TestParseTimeNoop(t *testing.T) {
 	abortChanStore := make(chan struct{}, 1)
 	startingChanStore := make(chan struct{}, 1)
 	errChanStore := make(chan error, 1)
-	onEachChanRetr := make(chan struct{}, 10)
+	onEachChanRetr := make(chan int, 10)
 
 	go ftpConn.Store(ActiveMode, "tmp.txt", "tmp.txt", doneChanStore, abortChanStore,
-		startingChanStore, errChanStore, onEachChanRetr, false)
+		startingChanStore, errChanStore, onEachChanRetr, false, 0)
 
 	loop := true
 	for loop {

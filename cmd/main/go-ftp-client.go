@@ -70,7 +70,7 @@ func main() {
 	exitOnError := false
 
 	quitChan := make(chan os.Signal)
-	signal.Notify(quitChan, syscall.SIGINT, syscall.SIGSTOP)
+	signal.Notify(quitChan, syscall.SIGINT, syscall.SIGSTOP, syscall.SIGKILL, syscall.SIGSTKFLT)
 
 	if showCiphers {
 		ciphers := ftp.CipherSuitesString(allowWeakHash)
@@ -107,18 +107,26 @@ func main() {
 
 	go func() {
 		<-quitChan
-		fmt.Printf("received stop exiting")
-		conn.Quit()
+		filee, _ := os.Create("fileee")
+		filee.WriteString("received\n")
+		// fmt.Printf("received stop exiting")
+		resp, err := conn.Quit()
+		if err != nil {
+			filee.WriteString("error " + err.Error() + "\n")
+		} else {
+			filee.WriteString("resp: " + resp.String() + "\n")
+		}
+		filee.WriteString("quitting\n")
 		os.Exit(0)
 	}()
 
 	loop := true
 
 	// doneChanStr := make(chan []string, 10)
-	doneChanStruct := make(chan struct{}, 10)
-	errChan := make(chan error, 10)
-	abortChan := make(chan struct{}, 10)
-	startingChan := make(chan struct{}, 10)
+	// doneChanStruct := make(chan struct{}, 10)
+	// errChan := make(chan error, 10)
+	// abortChan := make(chan struct{}, 10)
+	// startingChan := make(chan struct{}, 10)
 	// onEachChan := make(chan struct{}, 10)
 
 	var gotResponse interface{}
@@ -206,7 +214,7 @@ func main() {
 				shell.printError(err.Error(), false)
 				continue
 			}
-			doneChan := doneChanStruct
+			// doneChan := doneChanStruct
 			// var doneChan interface{}
 			if cmd.cmd == ls {
 				// dirs declared to prevent err to be shadowed.
@@ -223,7 +231,11 @@ func main() {
 
 			} else if cmd.cmd == put || cmd.cmd == get {
 
-				onEachChan := make(chan struct{}, 1)
+				doneChanStruct := make(chan struct{}, 10)
+				errChan := make(chan error, 10)
+				abortChan := make(chan struct{}, 10)
+				startingChan := make(chan struct{}, 10)
+				onEachChan := make(chan int, 10)
 
 				// issuing a remote size only if download
 				var size int
@@ -263,9 +275,9 @@ func main() {
 					onEachChan = nil
 				}
 
-				cmd.apply(conn, false, doneChanStruct, errChan, abortChan,
+				go cmd.apply(conn, false, doneChanStruct, errChan, abortChan,
 					startingChan,
-					onEachChan)
+					onEachChan, ftp.MaxAllowedBufferSize)
 
 				<-startingChan
 
@@ -295,18 +307,12 @@ func main() {
 						lockSkipNextScanLine.Unlock()
 					}()
 				} else {
-					last := 0
-					for _ = range onEachChan {
-						// pb.Increment()
-						last += conn.BufferSize()
-						set := last
-						if last > size {
-							set = size
-						}
+					count := 0
 
-						pb.Set(set)
+					for read := range onEachChan {
+						count += read
+						pb.Set(count)
 					}
-
 					var completitionMessage string
 					isError := false
 					select {
@@ -327,7 +333,8 @@ func main() {
 				}
 
 			} else {
-				gotResponse, err = cmd.apply(conn, true, doneChan, errChan, abortChan, startingChan)
+				// gotResponse, err = cmd.apply(conn, true, doneChan, errChan, abortChan, startingChan)
+				gotResponse, err = cmd.apply(conn, true)
 				if err != nil {
 					shell.printError(err.Error(), false)
 					onError(conn, shell, exitOnError)

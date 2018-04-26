@@ -208,7 +208,9 @@ func (c *cmd) apply(
 		errChan := args[1].(chan error)
 		abortChan := args[2].(chan struct{})
 		startingChan := args[3].(chan struct{})
-		onEachChan := args[4].(chan struct{})
+		onEachChan := args[4].(chan int)
+
+		bufferSize := args[5].(int)
 
 		ftpConn.Store(ftp.IndMode,
 			c.args[0],
@@ -219,7 +221,9 @@ func (c *cmd) apply(
 			errChan,
 			onEachChan,
 			// deleteIfAbort is a global variable.
-			deleteIfAbort)
+			deleteIfAbort,
+			bufferSize,
+		)
 		// return nil, nil
 
 	case get:
@@ -227,7 +231,10 @@ func (c *cmd) apply(
 		errChan := args[1].(chan error)
 		abortChan := args[2].(chan struct{})
 		startingChan := args[3].(chan struct{})
-		onEachChan := args[4].(chan struct{})
+		onEachChan := args[4].(chan int)
+
+		bufferSize := args[5].(int)
+
 		ftpConn.Retrieve(ftp.IndMode,
 			c.args[0],
 			c.args[1],
@@ -237,6 +244,7 @@ func (c *cmd) apply(
 			// delete if abort is not present because it's always done.
 			errChan,
 			onEachChan,
+			bufferSize,
 		)
 		// n
 	case rm:
