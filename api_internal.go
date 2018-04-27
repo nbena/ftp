@@ -19,7 +19,6 @@ package ftp
 
 import (
 	"bufio"
-	"bytes"
 	"context"
 	"crypto/tls"
 	"errors"
@@ -879,6 +878,8 @@ func (f *Conn) internalRetr(mode Mode,
 	// command has been issued, notify on startingChan
 	startingChan <- struct{}{}
 
+	// filee, _ := os.Create("fuckkk")
+
 	for loop {
 
 		select {
@@ -940,8 +941,9 @@ func (f *Conn) internalRetr(mode Mode,
 			return
 
 		default:
+			var n int
+			n, err = receiver.Read(buffer)
 
-			_, err = receiver.Read(buffer)
 			if err != nil && err == io.EOF {
 				// I know that it is ugly
 				// but in this way we can skip some if.
@@ -961,16 +963,18 @@ func (f *Conn) internalRetr(mode Mode,
 			// so we can skip null bytes that are added
 			/// to fill the buffer size.
 
-			index := bytes.IndexByte(buffer, 0)
-			if index == -1 {
-				index = len(buffer)
-			}
+			// index := bytes.IndexByte(buffer, 0)
+			// if index == -1 {
+			// 	index = len(buffer)
+			// }
 			if onEachChan != nil {
 				// onEachChan <- struct{}{}
-				onEachChan <- index
+
+				// onEachChan <- index
+				onEachChan <- n
 			}
 
-			if _, err = file.Write(buffer[:index]); err != nil {
+			if _, err = file.Write(buffer[:n]); err != nil {
 				// closing the connection as well
 				if onEachChan != nil {
 					close(onEachChan)
