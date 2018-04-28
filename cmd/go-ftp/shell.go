@@ -49,22 +49,49 @@ func newShell() *shell {
 	}
 }
 
-func (s *shell) scanLine() string {
+func (s *shell) scanLine(reset bool) string {
+	// buffered := s.in.Buffered()
+	// if reset {
+	// 	// s.in.Reset(s.in)
+	//
+	// 	filee, _ := os.Create("fileee")
+	// 	filee.WriteString(fmt.Sprintf("buffered %d\n", buffered))
+	// 	if buffered > 0 {
+	// 		d, err := s.in.Discard(buffered)
+	// 		if err != nil {
+	// 			filee.WriteString("Err:" + err.Error() + "\n")
+	// 		} else {
+	// 			filee.WriteString(fmt.Sprintf("discarded: %d\n", d))
+	// 		}
+	// 	}
+	//
+	// }
+	// var line string
+	// if buffered > 0 {
 	line, _ := s.in.ReadString('\n')
+	// } else {
+	// 	line = ""
+	// }
+
 	//unsafe but not check error on stdin
 	return strings.TrimSpace(line)
+}
+
+func (s *shell) discard() {
+	os.Stdin.Seek(0, 2)
+	os.Stdout.Seek(0, 2)
 }
 
 func (s *shell) askCredential() (string, string) {
 	username, password := "", ""
 	for username == "" {
 		fmt.Fprintf(s.out, "Enter your username: ")
-		username = s.scanLine()
+		username = s.scanLine(false)
 	}
 
 	for password == "" {
 		fmt.Fprintf(s.out, "Enter your password: ")
-		password = s.scanLine()
+		password = s.scanLine(false)
 	}
 
 	return username, password

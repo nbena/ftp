@@ -122,6 +122,8 @@ func main() {
 
 	loop := true
 
+	// skipNext := false
+
 	// doneChanStr := make(chan []string, 10)
 	// doneChanStruct := make(chan struct{}, 10)
 	// errChan := make(chan error, 10)
@@ -147,7 +149,10 @@ func main() {
 	currentCommandsIndex := 0
 
 	// unlocked := false
+	var line string
 	for loop {
+
+		// var line string
 
 		lockSkipNextScanLine.Lock()
 
@@ -156,22 +161,29 @@ func main() {
 		} else {
 			prompt = true
 		}
+
+		// if skipNext {
+		// 	skipNext = false
+		// 	line = ""
+		// 	continue
+		// }
+
 		lockSkipNextScanLine.Unlock()
 
-		var line string
-
 		if interactiveMode {
-			line = shell.scanLine()
+			line = shell.scanLine(false)
 		} else {
 			line = commandsArray[currentCommandsIndex]
 		}
+
+		// lockSkipNextScanLine.Unlock()
 
 		line = strings.TrimSpace(line)
 
 		if strings.HasPrefix(line, "Operation ") ||
 			strings.HasPrefix(line, "\nOperation") ||
 			strings.HasPrefix(line, "\n") ||
-			line == "" {
+			line == "" || line == "\n" {
 			if prompt == false {
 				prompt = true
 			}
@@ -296,12 +308,23 @@ func main() {
 						}
 						// <-doneChanStruct
 						lockSkipNextScanLine.Lock()
+						// read := shell.scanLine()
+						// read := shell.scanLine(true)
+						// read := ""
 						shell.print("\n")
+						// shell.discard()
 						if isError == false {
 							shell.print(completitionMessage)
 						} else {
 							shell.printError(completitionMessage, false)
 						}
+						// line = ""
+						// skipNext = true
+						// tryng to read someting
+						// if read != "" {
+						// 	line += read
+						// }
+						shell.discard()
 						shell.prompt(location)
 						prompt = false
 						lockSkipNextScanLine.Unlock()
