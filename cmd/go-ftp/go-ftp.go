@@ -22,7 +22,6 @@ import (
 	"os"
 	"os/signal"
 	"strings"
-	"sync"
 	"syscall"
 
 	"github.com/nbena/ftp"
@@ -107,16 +106,11 @@ func main() {
 
 	go func() {
 		<-quitChan
-		filee, _ := os.Create("fileee")
-		filee.WriteString("received\n")
 		// fmt.Printf("received stop exiting")
-		resp, err := conn.Quit()
+		_, err := conn.Quit()
 		if err != nil {
-			filee.WriteString("error " + err.Error() + "\n")
 		} else {
-			filee.WriteString("resp: " + resp.String() + "\n")
 		}
-		filee.WriteString("quitting\n")
 		os.Exit(0)
 	}()
 
@@ -145,7 +139,7 @@ func main() {
 
 	// skipNextScanLine := false
 	prompt := true
-	var lockSkipNextScanLine sync.Mutex
+	// var lockSkipNextScanLine sync.Mutex
 	currentCommandsIndex := 0
 
 	// unlocked := false
@@ -154,7 +148,7 @@ func main() {
 
 		// var line string
 
-		lockSkipNextScanLine.Lock()
+		// lockSkipNextScanLine.Lock()
 
 		if prompt && interactiveMode {
 			shell.prompt(location)
@@ -168,7 +162,7 @@ func main() {
 		// 	continue
 		// }
 
-		lockSkipNextScanLine.Unlock()
+		// lockSkipNextScanLine.Unlock()
 
 		if interactiveMode {
 			line = shell.scanLine(false)
@@ -280,80 +274,101 @@ func main() {
 
 				var pb *pb.ProgressBar
 
-				if asyncDownload == false {
-					pb = shell.displayProgressBar(size)
-					pb.Start()
-				} else {
-					onEachChan = nil
-				}
+				// if asyncDownload == false {
+				// 	pb = shell.displayProgressBar(size)
+				// 	pb.Start()
+				// } else {
+				// 	onEachChan = nil
+				// }
+				isError := false
+				pb = shell.displayProgressBar(size)
+				pb.Start()
 
 				go cmd.apply(conn, false, doneChanStruct, errChan, abortChan,
 					startingChan,
 					onEachChan, ftp.MaxAllowedBufferSize)
 
-				<-startingChan
-
-				if asyncDownload {
-					// this is not used in non interactive sessions
-					// so we do not call onError
-					go func() {
-						completitionMessage := fmt.Sprintf("Operation %s on %v finished\n", cmd.cmd, cmd.args)
-						isError := false
-						select {
-						case <-doneChanStruct:
-							// can't use the outer variable because main
-							// thread may use it at the same time.
-						case errInside := <-errChan:
-							completitionMessage = errInside.Error()
-						}
-						// <-doneChanStruct
-						lockSkipNextScanLine.Lock()
-						// read := shell.scanLine()
-						// read := shell.scanLine(true)
-						// read := ""
-						shell.print("\n")
-						// shell.discard()
-						if isError == false {
-							shell.print(completitionMessage)
-						} else {
-							shell.printError(completitionMessage, false)
-						}
-						// line = ""
-						// skipNext = true
-						// tryng to read someting
-						// if read != "" {
-						// 	line += read
-						// }
-						shell.discard()
-						shell.prompt(location)
-						prompt = false
-						lockSkipNextScanLine.Unlock()
-					}()
-				} else {
-					count := 0
-
-					for read := range onEachChan {
-						count += read
-						pb.Set(count)
-					}
-					var completitionMessage string
-					isError := false
-					select {
-					case <-doneChanStruct:
-						completitionMessage = fmt.Sprintf("Operation %s on %v finished\n", cmd.cmd, cmd.args)
-					case err = <-errChan:
-						completitionMessage = err.Error()
-						isError = true
-					}
-					// <-doneChanStruct
-
-					pb.Set(size)
-					pb.Finish()
-					pb.FinishPrint(completitionMessage)
-					if isError {
-						onError(conn, shell, exitOnError)
-					}
+				var message string
+				select {
+				case <-startingChan:
+					pb.Start()
+				case errInside := <-errChan:
+					message = errInside.Error()
+					isError = true
 				}
+
+				if isError {
+					pb.Finish()
+					pb.FinishPrint(message)
+					// exit and start at the for
+					// ugly but code is more readable (?)
+					continue
+				}
+
+				// if asyncDownload {
+				// this is not used in non interactive sessions
+				// so we do not call onError
+				// 	go func() {
+				// 		completitionMessage := fmt.Sprintf("Operation %s on %v finished\n", cmd.cmd, cmd.args)
+				// 		isError := false
+				// 		select {
+				// 		case <-doneChanStruct:
+				// 			// can't use the outer variable because main
+				// 			// thread may use it at the same time.
+				// 		case errInside := <-errChan:
+				// 			completitionMessage = errInside.Error()
+				// 		}
+				// 		// <-doneChanStruct
+				// 		lockSkipNextScanLine.Lock()
+				// 		// read := shell.scanLine()
+				// 		// read := shell.scanLine(true)
+				// 		// read := ""
+				// 		shell.print("\n")
+				// 		// shell.discard()
+				// 		if isError == false {
+				// 			shell.print(completitionMessage)
+				// 		} else {
+				// 			shell.printError(completitionMessage, false)
+				// 		}
+				// 		// line = ""
+				// 		// skipNext = true
+				// 		// tryng to read someting
+				// 		// if read != "" {
+				// 		// 	line += read
+				// 		// }
+				// 		shell.discard()
+				// 		shell.prompt(location)
+				// 		prompt = false
+				// 		lockSkipNextScanLine.Unlock()
+				// 	}()
+				// }
+				// else {
+				count := 0
+
+				for read := range onEachChan {
+					count += read
+					pb.Set(count)
+				}
+
+				select {
+				case <-doneChanStruct:
+					message = fmt.Sprintf("Operation %s on %v finished\n", cmd.cmd, cmd.args)
+				case err = <-errChan:
+					message = err.Error()
+					isError = true
+				}
+				// <-doneChanStruct
+
+				if !isError {
+					pb.Set(size)
+				}
+
+				pb.Finish()
+				pb.FinishPrint(message)
+				if isError {
+					onError(conn, shell, exitOnError)
+				}
+				// }
 
 			} else {
 				// gotResponse, err = cmd.apply(conn, true, doneChan, errChan, abortChan, startingChan)

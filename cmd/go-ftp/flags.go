@@ -71,7 +71,7 @@ func parseFlags() {
 	flag.StringVar(&commands, "commands", "", "list of semicolon-separated commands to be executed")
 	// flag.StringVar(&anonymous, "anonymous-ftp", true, "use anonym")
 	flag.BoolVar(&alwaysPwd, "always-run-pwd", true, "after every CD run an LS too show the current directory in prompt")
-	flag.BoolVar(&asyncDownload, "async-download", true, "when down/uploading a file, use a background transfering")
+	// flag.BoolVar(&asyncDownload, "async-download", true, "when down/uploading a file, use a background transfering")
 
 	flag.Parse()
 
@@ -106,8 +106,9 @@ func parseFlags() {
 			commandsArray = append(commandsArray, quit)
 		}
 		// fmt.Println(len(commandsArray))
-		for _, v := range commandsArray {
-			v = strings.TrimSpace(v)
+		for i, v := range commandsArray {
+			// trimmed := strings.TrimSpace(v)
+			commandsArray[i] = strings.TrimSpace(v)
 			// fmt.Printf("'%s'\n", v)
 		}
 		asyncDownload = false
