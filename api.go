@@ -211,6 +211,8 @@ type TLSOption struct {
 	AllowWeakHash bool
 	// same value of tls.Config.InsecureSkipVerify
 	SkipVerify bool
+	// same value for tls.Conf.ServerName
+	ServerName string
 }
 
 // Conn represents the top level object.

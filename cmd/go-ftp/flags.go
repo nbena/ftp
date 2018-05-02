@@ -96,6 +96,8 @@ func parseFlags() {
 		ftpDefaultMode = ftp.PassiveMode
 	}
 
+	serverName = strings.Split(remote, ":")[0]
+
 	// if commands != "" {
 	// 	parsedCommands, err = parseAllCommands(commands)
 	// 	if err != nil {

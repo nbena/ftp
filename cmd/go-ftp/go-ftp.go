@@ -40,6 +40,7 @@ func getConn() (*ftp.Conn, *ftp.Response, error) {
 				AuthTLSOnFirst:  authTLSOnFirst,
 				ContinueIfNoSSL: continueIfNoTLS,
 				ImplicitTLS:     implicitTLS,
+				ServerName:      serverName,
 			},
 			DefaultMode: ftpDefaultMode,
 			LocalIP:     localIPParsed,

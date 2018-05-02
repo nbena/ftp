@@ -307,6 +307,8 @@ func (c *Config) initTLS() {
 		c.tlsConfig.InsecureSkipVerify = false
 	}
 
+	c.tlsConfig.ServerName = c.TLSOption.ServerName
+
 	c.tlsConfig.CipherSuites = cipherSuites(c.TLSOption.AllowWeakHash)
 }
 
@@ -879,6 +881,7 @@ func (f *Conn) internalRetr(mode Mode,
 		case <-f.ctx.Done():
 			abortChan <- struct{}{}
 		case <-abortChan:
+			// log.Printf("received abort")
 			receiver.Close()
 			// var response *Response //declaring here just to prevent go vet.
 			response, err := f.writeCommandAndGetResponse("ABOR\r\n")

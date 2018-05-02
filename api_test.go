@@ -759,7 +759,8 @@ func TestAuthTLS(t *testing.T) {
 	)
 
 	if err != nil {
-		if strings.Contains(err.Error(), "handshake failure") {
+		if strings.Contains(err.Error(), "handshake failure") ||
+			strings.Contains(err.Error(), "bind: address already in use") {
 			t.Logf("Got \"expected\" error from handshake: %s", err.Error())
 		} else {
 			t.Errorf(err.Error())
