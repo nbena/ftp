@@ -63,9 +63,9 @@ func parseFlags() {
 	flag.StringVar(&password, "password", "c@b.com", "the password")
 	flag.BoolVar(&implicitTLS, "tls-implicit", false, "use implicit TLS")
 	flag.BoolVar(&authTLSOnFirst, "tls-auth-first", true, "run auth TLS asap")
-	flag.BoolVar(&allowSSL3, "tls-allow-ssl3", false, "allow or not SSL3")
+	// flag.BoolVar(&allowSSL3, "tls-allow-ssl3", false, "allow or not SSL3")
 	flag.BoolVar(&continueIfNoTLS, "tls-continue-if-no", false, "continue if TLS doesn't work")
-	flag.BoolVar(&allowWeakHash, "tls-allow-sha", false, "allow ciphers with SHA hash")
+	// flag.BoolVar(&allowWeakHash, "tls-allow-sha", false, "allow ciphers with SHA hash")
 	flag.BoolVar(&skipVerify, "tls-skip-verify", false, "skip or not the server cert verification")
 	flag.BoolVar(&showCiphers, "tls-show-ciphers", false, "show available TLS ciphers")
 	flag.StringVar(&commands, "commands", "", "list of semicolon-separated commands to be executed")
@@ -74,6 +74,10 @@ func parseFlags() {
 	// flag.BoolVar(&asyncDownload, "async-download", true, "when down/uploading a file, use a background transfering")
 
 	flag.Parse()
+
+	asyncDownload = false
+	allowWeakHash = false
+	allowSSL3 = false
 
 	// now checking
 	var err error
@@ -111,7 +115,7 @@ func parseFlags() {
 			commandsArray[i] = strings.TrimSpace(v)
 			// fmt.Printf("'%s'\n", v)
 		}
-		asyncDownload = false
+		// asyncDownload = false
 	}
 
 	splittedIP := strings.Split(localIP, ":")

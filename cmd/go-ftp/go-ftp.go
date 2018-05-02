@@ -93,8 +93,13 @@ func main() {
 	}
 
 	shell := newShell()
+	var err error
 	if username == "" || password == "" && interactiveMode {
-		username, password = shell.askCredential()
+		username, password, err = shell.askCredential()
+	}
+
+	if err != nil {
+		shell.printError(err.Error(), true)
 	}
 
 	conn, response, err := getConn()
@@ -107,10 +112,11 @@ func main() {
 	go func() {
 		<-quitChan
 		// fmt.Printf("received stop exiting")
-		_, err := conn.Quit()
-		if err != nil {
-		} else {
-		}
+		// _, errQuit := conn.Quit()
+		// if errQuit != nil {
+		// } else {
+		// }
+		conn.Quit()
 		os.Exit(0)
 	}()
 
@@ -144,6 +150,7 @@ func main() {
 
 	// unlocked := false
 	var line string
+	var errLine error
 	for loop {
 
 		// var line string
@@ -165,9 +172,17 @@ func main() {
 		// lockSkipNextScanLine.Unlock()
 
 		if interactiveMode {
-			line = shell.scanLine(false)
+			line, errLine = shell.scanLine()
 		} else {
 			line = commandsArray[currentCommandsIndex]
+		}
+
+		if errLine != nil {
+			shell.printError(err.Error(), false)
+			conn.Quit()
+			loop = false
+			continue
+			// continue in order to avoid another os.Exit
 		}
 
 		// lockSkipNextScanLine.Unlock()
@@ -184,6 +199,7 @@ func main() {
 			if !interactiveMode {
 				currentCommandsIndex++
 			}
+			// next iteration
 			continue
 		}
 
@@ -203,10 +219,12 @@ func main() {
 		} else if strings.HasPrefix(line, help) {
 			helpCmd := strings.Split(line, " ")
 			if len(helpCmd) == 1 {
+				// if user has just typed 'help'
 				for key, value := range helpMap {
 					shell.print(key + ":\t\t\t" + value.String(false) + "\n")
 				}
 			} else {
+				// 'help cmd'
 				helpMsg, ok := helpMap[helpCmd[1]]
 				if !ok {
 					shell.print(unrecognizedCmd + "\n")
@@ -215,6 +233,7 @@ func main() {
 				}
 			}
 		} else {
+			// parsing command.
 			cmd, err := parse(line)
 			if err != nil {
 				shell.printError(err.Error(), false)
@@ -391,7 +410,9 @@ func main() {
 				}
 			}
 
-			if cmd.cmd == "cd" && alwaysPwd {
+			// finally, if command was a cd we run a pwd so we can
+			// know where we are.
+			if cmd.cmd == cd && alwaysPwd {
 				currentDir, err := commandPwd.apply(conn, true)
 				if err != nil {
 					// do nothing, it's a command that hasn't been required by the user.

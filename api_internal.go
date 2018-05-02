@@ -60,7 +60,7 @@ import (
 // IsFtpError returns true if the response represents
 // an error. That means that the code is >=500 && < 600.
 func (r *Response) IsFtpError() bool {
-	return r.Code >= 500 && r.Code < 600
+	return (r.Code >= 500 && r.Code < 600) || r.Code == FileUnavailable
 }
 
 //
@@ -449,13 +449,6 @@ func (f *Conn) internalLs(mode Mode, filepath string, doneChan chan<- []string, 
 		defer listener.Close()
 
 		// sending command.
-		// response, err := f.writeCommandAndGetResponse(cmd)
-		//
-		// file, err := os.Create("response.txt")
-		//
-		// file.Write([]byte(response.String()))
-		//
-		// log.Printf("ls request: %s", response.String())
 		response, err := f.writeCommandAndGetResponse(cmd)
 		if err != nil {
 			errChan <- err

@@ -49,7 +49,7 @@ func newShell() *shell {
 	}
 }
 
-func (s *shell) scanLine(reset bool) string {
+func (s *shell) scanLine() (string, error) {
 	// buffered := s.in.Buffered()
 	// if reset {
 	// 	// s.in.Reset(s.in)
@@ -68,33 +68,45 @@ func (s *shell) scanLine(reset bool) string {
 	// }
 	// var line string
 	// if buffered > 0 {
-	line, _ := s.in.ReadString('\n')
+	line, err := s.in.ReadString('\n')
 	// } else {
 	// 	line = ""
 	// }
 
 	//unsafe but not check error on stdin
-	return strings.TrimSpace(line)
+	return strings.TrimSpace(line), err
 }
 
-func (s *shell) discard() {
-	os.Stdin.Seek(0, 2)
-	os.Stdout.Seek(0, 2)
-}
+// func (s *shell) discard() {
+// 	os.Stdin.Seek(0, 2)
+// 	os.Stdout.Seek(0, 2)
+// }
 
-func (s *shell) askCredential() (string, string) {
+func (s *shell) askCredential() (string, string, error) {
 	username, password := "", ""
-	for username == "" {
-		fmt.Fprintf(s.out, "Enter your username: ")
-		username = s.scanLine(false)
+	var err error
+	loop := true
+	for loop == true {
+		// fmt.Fprintf(s.out, "Enter your username: ")
+		s.print("Enter your username: ")
+		username, err = s.scanLine()
+		if err != nil || username != "" {
+			loop = false
+		}
 	}
 
-	for password == "" {
-		fmt.Fprintf(s.out, "Enter your password: ")
-		password = s.scanLine(false)
+	// necessary to skip the loop if there was
+	// an error previously.
+	for loop == true && err == nil {
+		// fmt.Fprintf(s.out, "Enter your password: ")
+		s.print("Enter your password: ")
+		password, err = s.scanLine()
+		if err != nil || username != "" {
+			loop = false
+		}
 	}
 
-	return username, password
+	return username, password, err
 
 }
 
