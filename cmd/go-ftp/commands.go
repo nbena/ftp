@@ -30,7 +30,7 @@ const (
 )
 
 var (
-	authSSL = "auth-ssl"
+	// authSSL = "auth-ssl"
 	authTLS = "auth-tls"
 	quit    = "quit"
 	noop    = "noop"
@@ -67,10 +67,10 @@ var (
 	unrecognizedCmd = "unrecognized command, type 'help' to view a list of available commands, or 'help <cmd>' for specific help"
 
 	helpMap = map[string]*helpEntry{
-		authSSL: &helpEntry{
-			help:   authSSLHelp,
-			isLong: true,
-		},
+		// authSSL: &helpEntry{
+		// 	help:   authSSLHelp,
+		// 	isLong: true,
+		// },
 		authTLS: &helpEntry{
 			help:   authSSLHelp,
 			isLong: true,
@@ -130,9 +130,9 @@ func (c *cmd) apply(
 
 	// no args
 	case authTLS:
-		return ftpConn.AuthTLS(allowSSL3)
-	case authSSL:
-		return ftpConn.AuthSSL()
+		return ftpConn.AuthTLS(allowSSL3, true)
+	// case authSSL:
+	// 	return ftpConn.AuthSSL()
 	case quit:
 		return ftpConn.Quit()
 	case noop:
@@ -282,8 +282,8 @@ func parseZeroArg(s string) (*cmd, error) {
 	switch s {
 	case authTLS:
 		command = commandAuthTLS
-	case authSSL:
-		command = commandAuthSSL
+	// case authSSL:
+	// 	command = commandAuthSSL
 	case quit:
 		command = commandQuit
 	case noop:

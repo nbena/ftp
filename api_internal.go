@@ -358,7 +358,7 @@ func internalDial(remote string, config *Config) (*Conn, *Response, error) {
 	// always try tls.
 	var tlsResponse *Response
 	if config.TLSOption.AuthTLSOnFirst {
-		tlsResponse, err = ftpConn.AuthTLS(true)
+		tlsResponse, err = ftpConn.AuthTLS(true, true)
 		if err != nil {
 			return nil, nil, err
 		}

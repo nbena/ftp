@@ -21,7 +21,10 @@ import (
 	"bufio"
 	"crypto/tls"
 	"errors"
+	"log"
+	"net"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -288,7 +291,7 @@ func (f *Conn) AuthSSL() (*Response, error) {
 // If the control connection is already TLS-ed an error will be
 // thrown, containing ftp.AlreadyTLS. If failback,
 // AuthSSL will be tried.
-func (f *Conn) AuthTLS(failback bool) (*Response, error) {
+func (f *Conn) AuthTLS(failback, newConnOnFailure bool) (*Response, error) {
 	response, err := f.writeCommandAndGetResponse("AUTH TLS\r\n")
 	if err != nil {
 		return nil, err
@@ -304,15 +307,51 @@ func (f *Conn) AuthTLS(failback bool) (*Response, error) {
 	}
 
 	// everything is fine...
+	// oldControl := f.control
 	f.control = tls.Client(f.control, f.config.tlsConfig)
 	tlsConn := f.control.(*tls.Conn)
 	err = tlsConn.Handshake()
 
-	// creating the new reader.
-	f.controlRw = bufio.NewReadWriter(
-		bufio.NewReader(f.control),
-		bufio.NewWriter(f.control),
-	)
+	if err != nil {
+		// keeping the 'old' connection
+		// so really nothing to do.
+		f.Quit()
+		newPort, _, _ := f.getRandomPort()
+		host := strings.Split(f.control.LocalAddr().String(), ":")[0]
+
+		remote := f.control.RemoteAddr().String()
+
+		var ips []net.IP
+		var newErr error
+		var newConn *Conn
+
+		ips, newErr = net.LookupIP(host)
+		if newErr != nil {
+			return nil, err
+		}
+		newConfig := f.config
+		newConfig.LocalIP = ips[0]
+		newConfig.LocalPort = newPort
+
+		newConn, _, newErr = DialAndAuthenticate(remote, newConfig)
+		if newErr != nil {
+			log.Println(newErr)
+			return nil, newErr
+		}
+		newControl := newConn.control
+		f.control = newControl
+		f.controlRw = bufio.NewReadWriter(
+			bufio.NewReader(f.control),
+			bufio.NewWriter(f.control),
+		)
+
+	} else {
+		// creating the new reader.
+		f.controlRw = bufio.NewReadWriter(
+			bufio.NewReader(f.control),
+			bufio.NewWriter(f.control),
+		)
+	}
 
 	return response, err
 }
