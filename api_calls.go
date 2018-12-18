@@ -1,18 +1,17 @@
-/* ftp
-   Copyright (C) 2018 Nicola Bena
+/*
+Copyright 2018 Nicola Bena
 
-   This program is free software: you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation, either version 3 of the License, or
-   (at your option) any later version.
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-   This program is distributed in the hope that it will be useful,
-   but WITHOUT ANY WARRANTY; without even the implied warranty of
-   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+    http://www.apache.org/licenses/LICENSE-2.0
 
-   You should have received a copy of the GNU General Public License
-   along with this program.  If not, see <https://www.gnu.org/licenses/>.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 */
 
 package ftp
@@ -21,14 +20,15 @@ import (
 	"bufio"
 	"crypto/tls"
 	"errors"
-	"log"
 	"net"
 	"strconv"
 	"strings"
 	"time"
 )
 
-// Dial connects to the ftp server.
+// Dial connects to the ftp server using the given configuration,
+// it returns a `Conn`, the server response, or an error.
+// It only setups the TCP connection for the control channel, no credentials are sent.
 func Dial(remote string, config *Config) (*Conn, *Response, error) {
 	return internalDial(remote, config)
 }
@@ -38,7 +38,6 @@ func Dial(remote string, config *Config) (*Conn, *Response, error) {
 func DialAndAuthenticate(remote string, config *Config) (*Conn, *Response, error) {
 	conn, _, err := internalDial(remote, config)
 	if err != nil {
-		// log.Printf("catch this as well")
 		return nil, nil, err
 	}
 	resp, err := conn.Authenticate()
@@ -48,19 +47,22 @@ func DialAndAuthenticate(remote string, config *Config) (*Conn, *Response, error
 	return conn, resp, nil
 }
 
-// Authenticate sends credentials to the serve. It will
-// return an error if an error occurs in sending/receiving or
+// Authenticate sends credentials to the server. It returns
+// an error if an error occurs in sending/receiving or
 // if the credential are wrong.
 func (f *Conn) Authenticate() (*Response, error) {
 
+	// Sending the username.
 	response, err := f.writeCommandAndGetResponse("USER " + f.config.Username + "\r\n")
 	if err != nil {
 		return nil, err
 	}
+	// if it's not the response code we expect...
 	if response.Code != UsernameOk {
 		return nil, newUnexpectedCodeError(UsernameOk, response.Code)
 	}
 
+	// now sending the password.
 	response, err = f.writeCommandAndGetResponse("PASS " + f.config.Password + "\r\n")
 	if err != nil {
 		return nil, err
@@ -69,29 +71,26 @@ func (f *Conn) Authenticate() (*Response, error) {
 }
 
 // Quit close the current FTP session. Every transfer in progress will be
-// aborted, if we do not use this method, we can send a QUIT but unless
-// the transfer is finished, the server does not listen for that QUIT.
-// If you are hurry and just want to exit, just exit and don't call this
-// function. :-)
+// aborted, then `QUIT` command is sent.
 func (f *Conn) Quit() (*Response, error) {
+	// data channels-related goroutines
+	// listen on the internal context to see whether it's being cancelled.
+	// So we send the cancel signal.
 	f.cancel()
-	// file, _ := os.Create("fileeeee")
-	// file.WriteString("you called me!\n")
+	// Now sending `QUIT`.
 	response, err := f.writeCommandAndGetResponse("QUIT\r\n")
-	// file.WriteString("writeen\n")
 	if err != nil {
-		// file.WriteString(err.Error())
 		return nil, err
 	}
 	if response.Code != QuitOk {
 		return nil, newUnexpectedCodeError(QuitOk, response.Code)
 	}
-
+	// Closing the control channel.
 	err = f.control.Close()
 	return response, err
 }
 
-// DeleteFile deletes the file.
+// DeleteFile deletes the file at the given path.
 func (f *Conn) DeleteFile(filepath string) (*Response, error) {
 	resp, err := f.writeCommandAndGetResponse("DELE " + filepath + "\r\n")
 	if err != nil {
@@ -100,7 +99,7 @@ func (f *Conn) DeleteFile(filepath string) (*Response, error) {
 	return unexpectedErrorOrResponse(DeleteFileOk, resp)
 }
 
-// MkDir creates a directory.
+// MkDir creates a directory named `name` ai the current path.
 func (f *Conn) MkDir(name string) (*Response, error) {
 	resp, err := f.writeCommandAndGetResponse("MKD " + name + "\r\n")
 	if err != nil {
@@ -109,7 +108,7 @@ func (f *Conn) MkDir(name string) (*Response, error) {
 	return unexpectedErrorOrResponse(MkDirOk, resp)
 }
 
-// DeleteDir deletes a directory.
+// DeleteDir deletes the directory `name`.
 func (f *Conn) DeleteDir(name string) (*Response, error) {
 	resp, err := f.writeCommandAndGetResponse("RMD " + name + "\r\n")
 	if err != nil {
@@ -118,7 +117,7 @@ func (f *Conn) DeleteDir(name string) (*Response, error) {
 	return unexpectedErrorOrResponse(DeleteDirOk, resp)
 }
 
-// Cd change the working directory.
+// Cd change the working directory to `path`.
 func (f *Conn) Cd(path string) (*Response, error) {
 	resp, err := f.writeCommandAndGetResponse("CWD " + path + "\r\n")
 	if err != nil {
@@ -127,10 +126,13 @@ func (f *Conn) Cd(path string) (*Response, error) {
 	return unexpectedErrorOrResponse(CdOk, resp)
 }
 
-// LsSimple performs a LIST on the current directory in a synchronous mode.
+// LsSimple performs a LIST on the current directory blocking the main goroutine.
 func (f *Conn) LsSimple(mode Mode) ([]string, error) {
+	// Here we'll get the result.
 	doneChan := make(chan []string, 1)
+	// Here we get errors, if any.
 	errChan := make(chan error, 1)
+	// we still use the internalLs.
 	f.internalLs(mode, "", doneChan, errChan)
 
 	var returnedError error
@@ -160,7 +162,8 @@ func (f *Conn) LsDirSimple(mode Mode, dir string) ([]string, error) {
 }
 
 // Ls performs a LIST on the current directory.
-// The result is written on doneChan, one row per item. Eventual errors will be
+// The result is written on doneChan, one row per element of the array.
+//  Errors will be
 // written on errChan, causing the function to immediately exit.
 func (f *Conn) Ls(mode Mode, doneChan chan<- []string, errChan chan<- error) {
 	f.internalLs(mode, "", doneChan, errChan)
@@ -178,6 +181,7 @@ func (f *Conn) LsDir(mode Mode, path string, doneChan chan<- []string, errChan c
 // will be transmitted if the file would have been downloaded.
 // According to RFC 3659, a 213 code must be returned if the
 // request is ok. If another code is returned, an error will be thrown.
+// Returns the server response, the size, or an error.
 func (f *Conn) Size(file string) (*Response, int, error) {
 	response, err := f.writeCommandAndGetResponse("SIZE " + file + "\r\n")
 	if err != nil {
@@ -186,7 +190,7 @@ func (f *Conn) Size(file string) (*Response, int, error) {
 	if response.Code != SizeOk {
 		return nil, 0, newUnexpectedCodeError(SizeOk, response.Code)
 	}
-	// the size is the message.
+	// Now parsing the response.
 	size, err := strconv.Atoi(response.Msg)
 	if err != nil {
 		return nil, 0, err
@@ -194,9 +198,8 @@ func (f *Conn) Size(file string) (*Response, int, error) {
 	return response, size, nil
 }
 
-// LastModificationTime returns the last modification file of the given file in
-// UTC format. The raw response is accessible, as well as the date (for sure)
-// and an eventual error occured.
+// LastModificationTime returns the last modification time of the given file in
+// UTC format. The raw response is accessible, as well as the parsed date.
 func (f *Conn) LastModificationTime(file string) (*Response, *time.Time, error) {
 	response, err := f.writeCommandAndGetResponse("MDTM " + file + "\r\n")
 	if err != nil {
@@ -209,8 +212,8 @@ func (f *Conn) LastModificationTime(file string) (*Response, *time.Time, error) 
 	return response, date, err
 }
 
-// Pwd returns the current working directory.
-// It returns the raw response too.
+// Pwd returns the current working directory, As usual, the raw response is
+// accessible as well.
 func (f *Conn) Pwd() (*Response, string, error) {
 	response, err := f.writeCommandAndGetResponse("PWD\r\n")
 	if err != nil {
@@ -224,10 +227,10 @@ func (f *Conn) Pwd() (*Response, string, error) {
 }
 
 // Rename renames a file called 'from' to a file called 'to'.
-// It returns just the last response.
+// This operation is not atomic (requires two messages) and atomicity
+// is not handled by the library. Only the second response is returned.
 func (f *Conn) Rename(from, to string) (*Response, error) {
 	if _, err := f.writeCommandAndGetResponse("RNFR " + from + "\r\n"); err != nil {
-		// fmt.Printf("First: %s\n", response.String())
 		return nil, err
 	}
 	return f.writeCommandAndGetResponse("RNTO " + to + "\r\n")
@@ -276,17 +279,6 @@ func (f *Conn) AuthSSL() (*Response, error) {
 	return response, err
 }
 
-// func (f *Conn) auth(tls bool) (*Response, error) {
-// 	var response *Response
-// 	var err error
-// 	if tls {
-// 		response, err = f.AuthTLS()
-// 	} else {
-// 		response, err = f.AuthSSL()
-// 	}
-// 	return response, err
-// }
-
 // AuthTLS issues an AuthTLS command.
 // If the control connection is already TLS-ed an error will be
 // thrown, containing ftp.AlreadyTLS. If failback,
@@ -297,8 +289,6 @@ func (f *Conn) AuthTLS(failback, newConnOnFailure bool) (*Response, error) {
 		return nil, err
 	}
 
-	// log.Printf("Response: %s", response.String())
-
 	if failback && response.Code != 234 { // tryssl
 		return f.AuthSSL()
 	}
@@ -306,8 +296,7 @@ func (f *Conn) AuthTLS(failback, newConnOnFailure bool) (*Response, error) {
 		return nil, errors.New(response.Error())
 	}
 
-	// everything is fine...
-	// oldControl := f.control
+	// if everything is fine...
 	f.control = tls.Client(f.control, f.config.tlsConfig)
 	tlsConn := f.control.(*tls.Conn)
 	err = tlsConn.Handshake()
@@ -335,7 +324,6 @@ func (f *Conn) AuthTLS(failback, newConnOnFailure bool) (*Response, error) {
 
 		newConn, _, newErr = DialAndAuthenticate(remote, newConfig)
 		if newErr != nil {
-			log.Println(newErr)
 			return nil, newErr
 		}
 		newControl := newConn.control
@@ -346,7 +334,8 @@ func (f *Conn) AuthTLS(failback, newConnOnFailure bool) (*Response, error) {
 		)
 
 	} else {
-		// creating the new reader.
+		// creating the new reader from the
+		// TLS connection.
 		f.controlRw = bufio.NewReadWriter(
 			bufio.NewReader(f.control),
 			bufio.NewWriter(f.control),
@@ -364,7 +353,10 @@ func (f *Conn) StoreSimple(
 	src,
 	dst string,
 ) error {
+	// Internally we still using the async version, so we
+	// have to listen on the channel it uses.
 	doneChan := make(chan struct{}, 1)
+	// sends something here if you want to stop the storing.
 	abortChan := make(chan struct{}, 1)
 	startingChan := make(chan struct{}, 1)
 	errChan := make(chan error, 1)
@@ -407,20 +399,16 @@ func (f *Conn) RetrSimple(
 	return returned
 }
 
-// Store loads a file to the server. The file is 'filepath',
-// specifies which FTP you want to use,
-// doneChan notifies when transfering is finished, if an error
-// occurs, it will be written on errChan, casuing the function to immediately
-// exit.
-// If you want to abort this transfering, write to abort. That channel
-// should be buffered, because this function don't check until it starts transfering.
-// When the abort command has been sent we wait for a response,
-// then the channel is closed and an empty struct wil be written on
-// doneChan.
-// Sending something to abortChan, will not cause the file to be deleted,
-// because that channel is checked AFTER THE ISSUING OF THE COMMAND
-// (but before the transfer).
-// In order to delete the file, pass the option.
+// Store loads the file `src` to `dst`.
+// Meaning of channels:
+// - `doneChan`: you'll get back an empty struct when the loading is finished.
+// - `abortChan`: sends something here to abort the transfer, should be buffered.
+// - `startingChan`: you get back an empty struct when the transfer really starts.
+// - `errChan` when an error happens. The transfer will be stopped as well.
+// - `onEachChan`: the size of transferred bytes in each single transfer. Can be `nil`.
+// If you want to delete the file if an abort happens, set `true` to `deleteIfAbort`.
+// `bufferSize` is the optional custom buffer size to use for the transfer. Pass 0 to not care
+// about it.
 func (f *Conn) Store(
 	mode Mode,
 	src string,
@@ -434,8 +422,9 @@ func (f *Conn) Store(
 	bufferSize int,
 ) {
 
+	// from the RFC:
 	/*
-				This command tells the server to abort the previous FTP
+		This command tells the server to abort the previous FTP
 		service command and any associated transfer of data.  The
 		abort command may require "special action", as discussed in
 		the Section on FTP Commands, to force recognition by the
@@ -472,9 +461,8 @@ func (f *Conn) Store(
 	)
 }
 
-// Retrieve download a file located at filepathSrc to filepathDest.
-// When finished, it writes into doneChan. Any error, that'll make it immediately exits,
-// is written into errChan.
+// TODO see args order.
+// Retrieve download a file located.
 func (f *Conn) Retrieve(mode Mode,
 	filepathSrc,
 	filepathDest string,

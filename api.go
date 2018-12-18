@@ -1,18 +1,17 @@
-/* ftp
-   Copyright (C) 2018 Nicola Bena
+/*
+Copyright 2018 Nicola Bena
 
-   This program is free software: you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation, either version 3 of the License, or
-   (at your option) any later version.
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-   This program is distributed in the hope that it will be useful,
-   but WITHOUT ANY WARRANTY; without even the implied warranty of
-   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+    http://www.apache.org/licenses/LICENSE-2.0
 
-   You should have received a copy of the GNU General Public License
-   along with this program.  If not, see <https://www.gnu.org/licenses/>.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 */
 
 package ftp
@@ -114,7 +113,7 @@ const (
 	SizeOk = 213
 
 	// TransferOk is the expected returned code received upon
-	// a transfer completition.
+	// a transfer completion.
 	TransferOk = 226
 
 	// UsernameOk is the expected return code for a USER command.
@@ -122,7 +121,7 @@ const (
 
 	// InvalidMode is the error msg returned when default Mode is passed
 	// and it is not allowed.
-	InvalidMode = "Invalid Mode, only ActiveMode and ModePassive are allowed"
+	InvalidMode = "invalid Mode, only ActiveMode and ModePassive are allowed"
 
 	// ActiveModeStr is the FTP mode active.
 	ActiveModeStr = "active"
@@ -136,8 +135,8 @@ const (
 	bufferSize = 1024
 )
 
-// UnexpectedCodeError is the type that repesents an error that
-// occuts when server returns us a code different from the expected.
+// UnexpectedCodeError is the type that represents an error that
+// occurs when server returns us a code different from the expected one.
 type UnexpectedCodeError struct {
 	Expected int
 	Got      int
@@ -163,8 +162,7 @@ func unexpectedErrorOrResponse(expected int, response *Response) (*Response, err
 	return response, nil
 }
 
-// Config contains the
-//parameter used for the connection.
+// Config contains the parameter used for the connection.
 type Config struct {
 	//The default modality (active or passive).
 	DefaultMode Mode
@@ -217,22 +215,14 @@ type TLSOption struct {
 
 // Conn represents the top level object.
 type Conn struct {
-	control net.Conn
-	// controlReader *bufio.Reader
-	controlRw *bufio.ReadWriter
-	// data            *lane.Queue // net.Conn
-	// listeners       *lane.Queue //net.Listener
-	// listenersParams *lane.Queue
-	//dataRW       *bufio.ReadWriter
-	//controlRW    []*bufio.ReadWriter
-	//lastResponse string
+	control      net.Conn
+	controlRw    *bufio.ReadWriter
 	config       *Config
 	lastUsedPort int
 	portLock     sync.Mutex
-	// rand   *rand.Rand
-	bufferSize int
+	bufferSize   int
 
-	// These two are used to implement graceful shudtown.
+	// These two are used to implement graceful shutdown.
 	// When we a used calls quit, the cancel function is called,
 	// causing the internal context's channel to send a value,
 	// and functions that internally uses abortChannels basically listen
@@ -268,16 +258,8 @@ func GetMode(mode string) (Mode, error) {
 	return ftpMode, nil
 }
 
-// Mode returns the current default modality.
+// Mode returns the current default FTP mode.
 func (f *Conn) Mode() string {
-	// var mode string
-	// if f.config.DefaultMode == ActiveMode {
-	// 	mode = "active"
-	// } else if f.config.DefaultMode == ActiveMode {
-	// 	mode = "passive"
-	// } else {
-	// 	mode = "default"
-	// }
 	return modeStr(f.config.DefaultMode)
 }
 
@@ -293,18 +275,20 @@ func modeStr(mode Mode) string {
 	return modeStr
 }
 
-// Response is the response from the server.
+// Response is an FTP response
 type Response struct {
-	//Response code received from the server.
+	// Response code received from the server.
 	Code int
-	//Msg sent from the server.
+	// Msg sent from the server.
 	Msg string
 }
 
+// Response implements error.
 func (r *Response) Error() string {
 	return r.String()
 }
 
+// String returns `code: msg`.
 func (r *Response) String() string {
 	return strconv.Itoa(r.Code) + ": " + r.Msg
 }
